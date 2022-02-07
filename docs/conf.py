@@ -46,7 +46,7 @@ extensions = [
     # TODO: still not working with python 3.10: https://github.com/sphinx-contrib/napoleon/issues/9
     # "sphinxcontrib.napoleon",  # requires sphinxcontrib-napoleon 
     "m2r2",  # new md -> rst
-    "sphinx_click",  # requires sphinx-click
+    #"sphinx_click",  # requires sphinx-click
 ]
 
 # Napoleon settings

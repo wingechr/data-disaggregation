@@ -5,29 +5,7 @@ import math
 from itertools import chain, product
 from collections import OrderedDict
 import numpy as np
-
-
-def create_group_indices(group_sizes):
-    """
-    Examples:
-    >>> create_group_indices([1, 2])
-    [0, 1, 1]
-    """
-    return list(chain(*[[i] * n for i, n in enumerate(group_sizes)]))
-
-
-def create_grouped_indices(group_sizes):
-    """
-    Examples:
-    >>> create_grouped_indices([1, 2])
-    [[0], [1, 2]]
-    """
-    res = []
-    start_idx = 0
-    for n in group_sizes:
-        res.append(list(range(start_idx, start_idx + n)))
-        start_idx += n
-    return res
+import pandas as pd
 
 
 def create_group_matrix(group_sizes):
@@ -115,10 +93,6 @@ class DimensionLevel:
 
         # create grouping matrix
         self._group_matrix = create_group_matrix(group_sizes)
-        # create group indices, i.e. [0, 0, 0, 1, 1, 2, 2, 2]
-        self._group_indices = create_group_indices(group_sizes)
-        # create grouped indices, i.e. [[0, 1, 2], [3, 4], [5, 6, 7]]
-        self._grouped_indices = create_grouped_indices(group_sizes)
 
         self._size = len(self.elements)
         self._indices = tuple(range(self.size))
@@ -261,17 +235,6 @@ class Domain:
             + ")"
         )
 
-    def create_variable(self, data, unit=None):
-        if isinstance(data, dict):
-            data_matrix = self.dict_to_matrix(data)
-        elif isinstance(data, list):
-            data_matrix = self.records_to_matrix(data)
-        elif isinstance(data, np.array):
-            data_matrix = data
-        else:
-            raise TypeError(type(data))
-        return Variable(domain=self, data_matrix=data_matrix, unit=unit)
-
     # create data matrix from dict data
     def dict_to_matrix(self, data):
         d_matrix = np.zeros(shape=self.shape)
@@ -293,20 +256,51 @@ class Domain:
 
 
 class Unit:
-    pass
+    def __init__(self, *args, **kwargs):
+        pass
 
 
 class Variable:
-    def __init__(self, domain, data_matrix, unit, is_intensive=False):
-        assert domain.shape == data_matrix.shape
-        self._domain = domain
-        self._data_matrix = data_matrix
-        self._unit = unit
+    def __init__(self, domain, data, unit=None, is_intensive=False):
+
+        if isinstance(domain, Domain):
+            self._domain = domain
+        else:
+            self._domain = Domain(domain)
+
+        if isinstance(data, dict):
+            self._data_matrix = self._domain.dict_to_matrix(data)
+        elif isinstance(data, list):
+            self._data_matrix = self._domain.records_to_matrix(data)
+        elif isinstance(data, pd.Series):
+            self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
+        elif isinstance(data, np.ndarray):
+            self._data_matrix = data.copy()
+        else:
+            raise TypeError(type(data))
+
+        assert self._domain.shape == self._data_matrix.shape
+
+        if isinstance(unit, Unit):
+            self._unit = unit
+        else:
+            self._unit = Unit(unit)
+
+        assert is_intensive in (True, False, None)
         self._is_intensive = is_intensive
 
     @property
     def is_intensive(self):
-        return self._is_intensive
+        return self._is_intensive == True
+
+    @property
+    def is_extensive(self):
+        return self._is_intensive == False
+
+    @property
+    def is_weight(self):
+        # TODO: also: unit is None or 1
+        return self._is_intensive == None
 
     @property
     def domain(self):
@@ -334,6 +328,31 @@ class Variable:
 
         return res
 
+    def as_weight(self):
+        if self.is_weight:
+            return self
+
+        assert self.domain.size == 1
+        dimension_level = self.domain.dimension_levels[0]
+        assert self._data_matrix.shape == (dimension_level.size,)
+
+        # create sum for groups. shapes: (m, n) * (n,) = (m,)
+        sums = dimension_level.group_matrix.transpose().dot(self._data_matrix)
+        assert np.all(sums != 0)
+
+        # create inverse, repeat, sum: (m,) => (1, m) => (n, m)
+        # values = np.repeat(1 / sums, dimension_level.size, axis=1)
+        sums = np.reshape(1 / sums, (1, sums.size))
+        sums = np.repeat(sums, dimension_level.size, axis=0)
+
+        assert sums.shape == dimension_level.group_matrix.shape
+        sums = np.sum(sums * dimension_level.group_matrix, axis=1)
+
+        assert sums.shape == self._data_matrix.shape
+        weights = sums * self._data_matrix
+        # is_intensive=None ==> weights
+        return Variable(domain=self.domain, data=weights, unit=None, is_intensive=None)
+
     def aggregate(self, dimension_name, weights=None):
 
         if self.is_intensive and not weights:
@@ -348,7 +367,7 @@ class Variable:
         new_dimension_level = dimension_level.parent
         group_matrix = dimension_level.group_matrix
 
-        print("aggregate %s => %s" % (dimension_level, new_dimension_level))
+        # print("aggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
@@ -384,7 +403,7 @@ class Variable:
         return Variable(new_domain, data_matrix, self.unit, self.is_intensive)
 
     def disaggregate(self, dimension_name, dimension_level_name, weights=None):
-        if not self.is_intensive and not weights:
+        if self.is_extensive and not weights:
             raise Exception(
                 "extensive disaggregation without weights for %s" % dimension_level_name
             )
@@ -407,7 +426,7 @@ class Variable:
 
         group_matrix = new_dimension_level.group_matrix.transpose()
 
-        print("disaggregate %s => %s" % (dimension_level, new_dimension_level))
+        # print("disaggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
@@ -440,14 +459,14 @@ class Variable:
         return Variable(new_domain, data_matrix, self.unit, self.is_intensive)
 
     def expand(self, dimension):
-        print("adding %s" % (dimension.name,))
+        # print("adding %s" % (dimension.name,))
         assert dimension.is_dimension_root
         data_matrix = np.expand_dims(self._data_matrix, axis=self.domain.size)
         domain = Domain(list(self.domain.dimension_levels) + [dimension])
         return Variable(domain, data_matrix, self.unit, self.is_intensive)
 
     def squeeze(self, dimension_name):
-        print("removing %s" % (dimension_name,))
+        # print("removing %s" % (dimension_name,))
 
         dim_idx = self.domain.get_dimension_index(dimension_name)
         assert self.domain.dimension_levels[dim_idx].is_dimension_root
@@ -477,6 +496,9 @@ class Variable:
         change_dimensions = set(self.domain.dimensions) & set(target_domain.dimensions)
 
         weights = weights or {}
+        for k, v in weights.items():
+            weights[k] = v.as_weight()
+
         result = self
         for dim in drop_dimensions:
             # aggregate to root, then drop
@@ -520,11 +542,15 @@ class Variable:
 
         return result
 
-    def copy(self):
-        return Variable(self.domain, self._data_maxtrix, self.unit, self.is_intensive)
-
     def __str__(self):
         return str(self._data_matrix)
+
+
+class Scalar(Variable):
+    def __init__(self, value, unit=None, is_intensive=False):
+        super().__init__(
+            domain=[], data={tuple(): value}, unit=unit, is_intensive=is_intensive
+        )
 
 
 if __name__ == "__main__":
@@ -535,7 +561,7 @@ if __name__ == "__main__":
     # test example
 
     d_t = Dimension("time")
-    l_day = d_t.add_level("day", {None: ["d1", "d2"]})
+    l_day = d_t.add_level("day", ["d1", "d2"])  # first level
     l_day_hour = l_day.add_level(
         "day_hour", {"d1": ["d1_1", "d1_2"], "d2": ["d2_1", "d2_2"]}
     )
@@ -546,16 +572,31 @@ if __name__ == "__main__":
 
     dom = Domain([l_reg, l_day_hour])
     dom2 = Domain([l_year_hour])
-    # sca = Domain([]).create_variable({tuple(): 1})
-    var = dom.create_variable(
-        [
-            {"region": "r2", "day_hour": "d2_1", "value": 4},
-            {"region": "r1", "day_hour": "d1_1", "value": 2},
-            {"region": "r1", "day_hour": "d2_2", "value": 3},
-        ]
+
+    var = Variable(
+        dom,
+        pd.DataFrame(
+            [
+                {"r": "r2", "day_hour": "d2_1", "value": 4},
+                {"r": "r1", "day_hour": "d1_1", "value": 2},
+                {"r": "r1", "day_hour": "d2_2", "value": 3},
+            ]
+        )
+        .set_index(["r", "day_hour"])
+        .value,
     )
-    w = dom2.create_variable(
-        [{"year_hour": "1", "value": 0.4}, {"year_hour": "4", "value": 0.6}]
+    w = Variable(
+        [l_year_hour],
+        [{"year_hour": "1", "value": 4}, {"year_hour": "4", "value": 6}],
+        None,
     )
+
+    print(w.as_records())
+
     var2 = var.transform(dom2, {"year_hour": w})
     print(var2.as_records())
+
+    sca = Scalar(100)
+
+    var2 = sca.transform(dom2, {"year_hour": w})
+    print(pd.DataFrame(var2.as_records()))

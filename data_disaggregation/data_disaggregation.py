@@ -6,7 +6,7 @@ from itertools import chain, product
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
-
+import networkx as nx
 
 def create_group_matrix(group_sizes):
     """
@@ -59,7 +59,21 @@ def create_weighted_group_matrix(
     return matrix
 
 
+def group(items):
+    result_lists = OrderedDict()
+    result_sets = OrderedDict()
+    for key, val in items:
+        if key not in result_lists:
+            result_lists[key] = []
+            result_sets[key] = set()
+        if val in result_sets[key]:
+            raise Exception("Duplicate key: %s" % val)
+        result_sets[key].add(val)
+        result_lists[key].append(val)
+    return result_lists
+
 class DimensionLevel:
+    """Comparable to a pd.Index, but grouped and linked to other Levels in a tree"""
     def __init__(self, parent, name, grouped_elements):
         self._parent = parent
         self._name = name
@@ -80,8 +94,15 @@ class DimensionLevel:
             self.parent._children[self.name] = self
 
             # elements
-            if self.parent.is_dimension_root and not isinstance(grouped_elements, dict):
-                grouped_elements = {None: grouped_elements}
+            if self.parent.is_dimension_root:
+                if isinstance(grouped_elements, dict):
+                    grouped_elements = {None: grouped_elements}
+                elif isinstance(grouped_elements, pd.Series):
+                    grouped_elements = {None: grouped_elements.values}
+            else:
+                if isinstance(grouped_elements, pd.Series):
+                    grouped_elements = group(grouped_elements.iteritems())                    
+
             parent_elements = self.parent.elements
             assert set(grouped_elements.keys()) == set(parent_elements)
             grouped_elements = [grouped_elements[pe] for pe in parent_elements]
@@ -97,6 +118,15 @@ class DimensionLevel:
         self._size = len(self.elements)
         self._indices = tuple(range(self.size))
         self._element2index = dict(zip(self.elements, self.indices))
+
+    def to_graph(self):
+        gr = nx.DiGraph()
+        for level in self._levels.values():
+            gr.add_node(level.name)
+            if not level.is_dimension_root:
+                gr.add_edge(level.name, level.parent.name)
+        return gr
+        
 
     def add_level(self, name, grouped_elements):
         return DimensionLevel(parent=self, name=name, grouped_elements=grouped_elements)
@@ -160,6 +190,8 @@ class Dimension(DimensionLevel):
 
 
 class Domain:
+    """Comparaable to pandas.MultiIndex
+    """
     def __init__(self, dimension_levels):
         dimension_levels = dimension_levels or []
 
@@ -187,6 +219,12 @@ class Domain:
 
     def get_dimension_level(self, dimension_name):
         return self._dimension_levels[dimension_name]
+
+    def to_pandas_multi_index(self):
+        # special case scalar:
+        if not self.dimensions:
+            return None
+        return pd.MultiIndex.from_tuples(self.keys, names=self.dimension_level_names)
 
     @property
     def dimension_levels(self):
@@ -239,6 +277,10 @@ class Domain:
     def dict_to_matrix(self, data):
         d_matrix = np.zeros(shape=self.shape)
         for key, val in data.items():
+            # TODO: create new function?
+            # fix for 1-dim
+            if not isinstance(key, tuple):
+                key = (key,)
             idx = self.get_index(key)
             d_matrix[idx] = val
         return d_matrix
@@ -261,7 +303,9 @@ class Unit:
 
 
 class Variable:
-    def __init__(self, domain, data, unit=None, is_intensive=False):
+    """Comparable to pandas.Series with multiindex and/or multidimensional numpy.ndarray
+    """
+    def __init__(self, name, domain, data, unit=None, is_intensive=False):
 
         if isinstance(domain, Domain):
             self._domain = domain
@@ -273,6 +317,7 @@ class Variable:
         elif isinstance(data, list):
             self._data_matrix = self._domain.records_to_matrix(data)
         elif isinstance(data, pd.Series):
+            assert data.index.is_unique
             self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
         elif isinstance(data, np.ndarray):
             self._data_matrix = data.copy()
@@ -288,6 +333,11 @@ class Variable:
 
         assert is_intensive in (True, False, None)
         self._is_intensive = is_intensive
+        self._name = name
+
+    @property
+    def name(self):
+        return self._name
 
     @property
     def is_intensive(self):
@@ -310,7 +360,7 @@ class Variable:
     def unit(self):
         return self._unit
 
-    def as_dict(self, skip_0=False):
+    def to_dict(self, skip_0=False):
         res = {}
         for idx, key in self.domain.iter_indices_keys():
             val = self._data_matrix[idx]
@@ -318,15 +368,23 @@ class Variable:
                 res[key] = val
         return res
 
-    def as_records(self, skip_0=False, value="value"):
+    def to_records(self, skip_0=False, value="value"):
         res = []
         dimension_level_names = self.domain.dimension_level_names
-        for key, val in self.as_dict(skip_0=skip_0).items():
+        for key, val in self.to_dict(skip_0=skip_0).items():
             rec = dict(zip(dimension_level_names, key))
             rec[value] = val
             res.append(rec)
 
         return res
+
+    def as_normalized(self):
+        s = np.sum(self._data_matrix)
+        if not s:
+            raise Exception("sum = 0")
+        data = self._data_matrix / s
+        return Variable(self.name, self.domain, data=data, unit=None, is_intensive=True)
+
 
     def as_weight(self):
         if self.is_weight:
@@ -351,7 +409,7 @@ class Variable:
         assert sums.shape == self._data_matrix.shape
         weights = sums * self._data_matrix
         # is_intensive=None ==> weights
-        return Variable(domain=self.domain, data=weights, unit=None, is_intensive=None)
+        return Variable(name=self.name, domain=self.domain, data=weights, unit=None, is_intensive=None)
 
     def aggregate(self, dimension_name, weights=None):
 
@@ -367,7 +425,7 @@ class Variable:
         new_dimension_level = dimension_level.parent
         group_matrix = dimension_level.group_matrix
 
-        # print("aggregate %s => %s" % (dimension_level, new_dimension_level))
+        print("aggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
@@ -400,7 +458,7 @@ class Variable:
             self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
         ).swapaxes(dim_idx_last, dim_idx)
 
-        return Variable(new_domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(self.name, new_domain, data_matrix, self.unit, self.is_intensive)
 
     def disaggregate(self, dimension_name, dimension_level_name, weights=None):
         if self.is_extensive and not weights:
@@ -426,7 +484,7 @@ class Variable:
 
         group_matrix = new_dimension_level.group_matrix.transpose()
 
-        # print("disaggregate %s => %s" % (dimension_level, new_dimension_level))
+        print("disaggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
@@ -456,17 +514,17 @@ class Variable:
             self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
         ).swapaxes(dim_idx_last, dim_idx)
 
-        return Variable(new_domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(self.name, new_domain, data_matrix, self.unit, self.is_intensive)
 
     def expand(self, dimension):
-        # print("adding %s" % (dimension.name,))
+        print("adding %s" % (dimension.name,))
         assert dimension.is_dimension_root
         data_matrix = np.expand_dims(self._data_matrix, axis=self.domain.size)
         domain = Domain(list(self.domain.dimension_levels) + [dimension])
-        return Variable(domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
 
     def squeeze(self, dimension_name):
-        # print("removing %s" % (dimension_name,))
+        print("removing %s" % (dimension_name,))
 
         dim_idx = self.domain.get_dimension_index(dimension_name)
         assert self.domain.dimension_levels[dim_idx].is_dimension_root
@@ -475,53 +533,62 @@ class Variable:
             self.domain.dimension_levels[:dim_idx]
             + self.domain.dimension_levels[dim_idx + 1 :]
         )
-        return Variable(domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
 
     def reorder(self, dimension_names):
         assert set(dimension_names) == set(self.domain.dimension_names)
         indices = [self.domain.get_dimension_index(n) for n in dimension_names]
         data_matrix = self._data_matrix.transpose(indices)
         domain = Domain([self.domain.dimension_levels[i] for i in indices])
-        return Variable(domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
 
-    def transform(self, target_domain, weights=None):
+    def transform(self, domain, level_weights=None):
         """
-        root_dimensions that are in current domain and NOT in target_domain will be aggregated, then dimension will be dropped.
-        root_dimensions that are NOT in current domain but in target_domain will be first added at dimension level and then disaggregated
+        root_dimensions that are in current domain and NOT in domain will be aggregated, then dimension will be dropped.
+        root_dimensions that are NOT in current domain but in domain will be first added at dimension level and then disaggregated
         root_dimensions that are in both will be tranformed along the transformation path: up until nearest common ancestor, then down
         """
 
-        add_dimensions = set(target_domain.dimensions) - set(self.domain.dimensions)
-        drop_dimensions = set(self.domain.dimensions) - set(target_domain.dimensions)
-        change_dimensions = set(self.domain.dimensions) & set(target_domain.dimensions)
+        if not isinstance(domain, Domain):
+            domain = Domain(domain)
 
-        weights = weights or {}
-        for k, v in weights.items():
-            weights[k] = v.as_weight()
+        add_dimensions = set(domain.dimensions) - set(self.domain.dimensions)
+        drop_dimensions = set(self.domain.dimensions) - set(domain.dimensions)
+        change_dimensions = set(self.domain.dimensions) & set(domain.dimensions)
 
+        level_weights = level_weights or {}
+        def get_weights(dimension_level):
+            level_name = dimension_level.name
+            weights = level_weights.get(level_name)
+            if not weights:
+                return None
+            weights = weights.transform(Domain([dimension_level]))
+            weights = weights.as_weight()
+            return weights
+        
         result = self
         for dim in drop_dimensions:
             # aggregate to root, then drop
             path = self.domain.get_dimension_level(dim.name).path
             level_names = list(reversed(path))[1:]
-            for level_name in level_names:
-                result = result.aggregate(dim.name, weights=weights.get(level_name))
+            for level_name in level_names:                
+                weights = get_weights(dim.get_level(level_name))
+                result = result.aggregate(dim.name, weights=weights)
             result = result.squeeze(dim.name)
 
         for dim in add_dimensions:
             # add, then disaggregate
             result = result.expand(dim)
-            path = target_domain.get_dimension_level(dim.name).path
+            path = domain.get_dimension_level(dim.name).path
             level_names = path[1:]
             for level_name in level_names:
-                result = result.disaggregate(
-                    dim.name, level_name, weights=weights.get(level_name)
-                )
+                weights = get_weights(dim.get_level(level_name))
+                result = result.disaggregate(dim.name, level_name, weights=weights)
 
         for dim in change_dimensions:
             # aggregate up to closest common ancestor, then down
             path_up = self.domain.get_dimension_level(dim.name).path
-            path_down = target_domain.get_dimension_level(dim.name).path
+            path_down = domain.get_dimension_level(dim.name).path
             # find common part of path
             path_shared = []
             for pu, pd in zip(path_up, path_down):
@@ -532,24 +599,36 @@ class Variable:
             path_down = path_down[n:]
             path_up = list(reversed(path_up[n:]))
             for level_name in path_up:
-                result = result.aggregate(dim.name, weights=weights.get(level_name))
+                weights = weights = get_weights(dim.get_level(level_name))
+                result = result.aggregate(dim.name, weights=weights)
             for level_name in path_down:
-                result = result.disaggregate(
-                    dim.name, level_name, weights=weights.get(level_name)
-                )
+                weights = weights = get_weights(dim.get_level(level_name))
+                result = result.disaggregate(dim.name, level_name, weights=weights)
 
-        result = result.reorder(target_domain.dimension_names)
+        result = result.reorder(domain.dimension_names)
 
         return result
 
     def __str__(self):
         return str(self._data_matrix)
+    
+    def to_series(self):
+        # TODO: REALLY check that alignment of keys and values is correct!!
+        
+        # special case scalar
+
+
+        # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
+        # flatten into array C-style
+        data = self._data_matrix.flatten("C")
+        index = self.domain.to_pandas_multi_index()
+        return pd.Series(data, index=index, name=self.name)
 
 
 class Scalar(Variable):
-    def __init__(self, value, unit=None, is_intensive=False):
+    def __init__(self, name, value, unit=None, is_intensive=False):
         super().__init__(
-            domain=[], data={tuple(): value}, unit=unit, is_intensive=is_intensive
+            name=name, domain=[], data={tuple(): value}, unit=unit, is_intensive=is_intensive
         )
 
 
@@ -557,46 +636,3 @@ if __name__ == "__main__":
     import doctest
 
     doctest.testmod(optionflags=doctest.ELLIPSIS)
-
-    # test example
-
-    d_t = Dimension("time")
-    l_day = d_t.add_level("day", ["d1", "d2"])  # first level
-    l_day_hour = l_day.add_level(
-        "day_hour", {"d1": ["d1_1", "d1_2"], "d2": ["d2_1", "d2_2"]}
-    )
-    l_year_hour = d_t.add_level("year_hour", ["1", "2", "3", "4"])
-
-    d_s = Dimension("space")
-    l_reg = d_s.add_level("region", ["r1", "r2"])
-
-    dom = Domain([l_reg, l_day_hour])
-    dom2 = Domain([l_year_hour])
-
-    var = Variable(
-        dom,
-        pd.DataFrame(
-            [
-                {"r": "r2", "day_hour": "d2_1", "value": 4},
-                {"r": "r1", "day_hour": "d1_1", "value": 2},
-                {"r": "r1", "day_hour": "d2_2", "value": 3},
-            ]
-        )
-        .set_index(["r", "day_hour"])
-        .value,
-    )
-    w = Variable(
-        [l_year_hour],
-        [{"year_hour": "1", "value": 4}, {"year_hour": "4", "value": 6}],
-        None,
-    )
-
-    print(w.as_records())
-
-    var2 = var.transform(dom2, {"year_hour": w})
-    print(var2.as_records())
-
-    sca = Scalar(100)
-
-    var2 = sca.transform(dom2, {"year_hour": w})
-    print(pd.DataFrame(var2.as_records()))

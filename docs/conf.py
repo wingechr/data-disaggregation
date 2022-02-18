@@ -64,7 +64,7 @@ napoleon_use_rtype = True
 napoleon_use_keyword = True
 
 # Mathjax settings
-mathjax_path = "mathjax/mathjax-2.7.1/MathJax.js"
+mathjax_path = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js"
 mathjax_config = {
     "extensions": ["tex2jax.js"],
     "jax": ["input/TeX", "output/CommonHTML"],

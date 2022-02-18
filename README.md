@@ -29,7 +29,7 @@ graph TD;
     * --- 1;
     * --- 2;
     * --- *...[...];
-    * --- 8760;    
+    * --- 8760;
 ```
 
 * Disaggregation maps data from one level in a hierarchy to the next one further down, aggregation to the next one up conversely, using level specific factors, which are usually all 1.0 or sum up to 1.0 for each item
@@ -49,7 +49,7 @@ graph TD;
     A2 -- 0.4 --> B3;
     A2 -- 0.4 --> B4;
     A2 -- 0.2 --> B5;
-    
+
 ```
 
 ### Aggregation (extensive) from B to A
@@ -80,7 +80,7 @@ graph TD;
     A2 -- 1 --> B3;
     A2 -- 1 --> B4;
     A2 -- 1 --> B5;
-    
+
 ```
 
 ### Aggregation (intensive) from B to A
@@ -117,7 +117,7 @@ A change in level (aggregation or disaggregation) can be represented by a matrix
     D' = D \cdot T \\
 ```
 
-Note: the data matrix will have more than one dimension. 
+Note: the data matrix will have more than one dimension.
 In the examples, the first dimension represents all dimensions that are not part of the transformation.
 
 ### Disaggregation (extensive) from A(n=2) to B(n=5)
@@ -128,7 +128,7 @@ In the examples, the first dimension represents all dimensions that are not part
         2 & 3 \\
         4 & 5 \\
     \end{pmatrix} \\
-    
+
     T = \begin{pmatrix}
         0.5 & 0.5 & \cdot & \cdot & \cdot \\
         \cdot & \cdot & 0.4 & 0.4 & 0.2
@@ -182,12 +182,12 @@ array([[0. , 0. , 0.4, 0.4, 0.2],
 >>>
 
 D = np.array([
-    [0, 1], 
-    [2, 3], 
+    [0, 1],
+    [2, 3],
     [4, 5]]
 )
 T = np.array([
-    [0.5, 0.5, 0.0, 0.0, 0.0], 
+    [0.5, 0.5, 0.0, 0.0, 0.0],
     [0.0, 0.0, 0.4, 0.4, 0.2]
 ])
 D2 = D.dot(T)

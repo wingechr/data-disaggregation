@@ -1,9 +1,9 @@
 
-.wy-nav-top, .wy-side-nav-search{    
-    background-color: #2980b9;    
+.wy-nav-top, .wy-side-nav-search{
+    background-color: #2980b9;
 }
-.wy-side-nav-search input[type="text"] {    
-    border-color: #2980b9;    
+.wy-side-nav-search input[type="text"] {
+    border-color: #2980b9;
 }
 
 .rst-content table.docutils th {

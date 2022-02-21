@@ -25,6 +25,10 @@ jobs:
     - name: run unittests
       run: python -m unittest
 
+  deploy-test:
+    if: echo {{ github.ref }}
+    needs: run-tests
+
   deploy:
     if: startsWith(github.ref, 'refs/tags')
     needs: run-tests

@@ -33,6 +33,7 @@ if __name__ == "__main__":
         license=pkg.__copyright__,
         project_urls={
             "Bug Tracker": pkg.__url__,
+            "Documentation": "https://data-disaggregation.readthedocs.io",
         },
         classifiers=[
             "Programming Language :: Python :: 3",

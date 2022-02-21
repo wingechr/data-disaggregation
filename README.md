@@ -1,7 +1,10 @@
 # Data (dis)aggregation
 
 [![docs](https://img.shields.io/readthedocs/data-disaggregation)](https://data-disaggregation.readthedocs.io)
-![tests](https://github.com/wingechr/data-disaggregation/actions/workflows/unittest.yml/badge.svg)
+[![tests](https://github.com/wingechr/data-disaggregation/actions/workflows/unittest.yml/badge.svg)](https://github.com/wingechr/data-disaggregation/actions/workflows/unittest.yml)
+[![license](https://img.shields.io/pypi/l/data-disaggregation)](https://raw.githubusercontent.com/wingechr/data-disaggregation/main/LICENSE)
+![python](https://img.shields.io/pypi/pyversions/data-disaggregation)]
+[![release](https://img.shields.io/github/v/release/wingechr/data-disaggregation?include_prereleases)](https://github.com/wingechr/data-disaggregation/releases)
 
 
 ## Install

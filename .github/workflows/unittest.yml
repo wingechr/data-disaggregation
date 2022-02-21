@@ -19,9 +19,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
+        cd ${{ github.workspace }}
         python -m pip install --upgrade pip
         python -m pip install requirements.txt
     - name: run unittests
-      run: |
-        cd ${{ github.workspace }}
-        python -m unittest
+      run: python -m unittest

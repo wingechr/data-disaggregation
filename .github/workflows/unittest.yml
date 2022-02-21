@@ -25,14 +25,6 @@ jobs:
     - name: run unittests
       run: python -m unittest
 
-  deploy-test:
-    needs: run-tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: check
-        run: echo {{ github.ref }}
-
-
   deploy:
     if: startsWith(github.ref, 'refs/tags')
     needs: run-tests
@@ -51,3 +43,5 @@ jobs:
       uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
+        skip_existing: true
+        verbose: true

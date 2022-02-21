@@ -604,15 +604,7 @@ class Variable:
         )
 
     def transform(self, domain, level_weights=None):
-        """
-        root_dimensions that are in current domain and NOT in domain
-            will be aggregated, then dimension will be dropped.
-        root_dimensions that are NOT in current domain but in domain
-            will be first added at dimension level and then disaggregated
-        root_dimensions that are in both will be tranformed
-        along the transformation path:
-            up until nearest common ancestor, then down
-        """
+        """TODO"""
 
         if not isinstance(domain, Domain):
             domain = Domain(domain)

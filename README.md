@@ -1,5 +1,8 @@
 # Data (dis)aggregation
 
+[![docs](https://img.shields.io/readthedocs/data-disaggregation)](https://data-disaggregation.readthedocs.io)
+
+
 ## Install
 
 ```bash

@@ -8,8 +8,4 @@ Table of content
 
    readme
    concept
-   modules
-
-
-
-.. todolist::
+   api

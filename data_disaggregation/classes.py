@@ -278,7 +278,8 @@ class Unit:
 
 
 class Variable:
-    """Comparable to pandas.Series with multiindex and/or multidimensional numpy.ndarray"""
+    """Comparable to pandas.Series with multiindex
+    and/or multidimensional numpy.ndarray"""
 
     def __init__(self, name, data, domain, vartype, unit=None):
 
@@ -459,7 +460,9 @@ class Variable:
 
             if not np.all(np.isclose(row_sums, 1)):
                 raise ValueError(
-                    "Aggregation checksum failed. This should not happen (if weights are of type Weight"
+                    """Aggregation checksum failed.
+                    This should not happen (if weights are of type Weight)
+                    """
                 )
 
         dimension_levels[dim_idx] = new_dimension_level
@@ -524,7 +527,9 @@ class Variable:
             row_sums = np.sum(group_matrix, axis=1)
             if not np.all(np.isclose(row_sums, 1)):
                 raise ValueError(
-                    "Aggregation checksum failed. This should not happen (if weights are of type Weight"
+                    """Aggregation checksum failed.
+                    This should not happen (if weights are of type Weight)
+                    """
                 )
 
         data_matrix = np.matmul(
@@ -600,9 +605,13 @@ class Variable:
 
     def transform(self, domain, level_weights=None):
         """
-        root_dimensions that are in current domain and NOT in domain will be aggregated, then dimension will be dropped.
-        root_dimensions that are NOT in current domain but in domain will be first added at dimension level and then disaggregated
-        root_dimensions that are in both will be tranformed along the transformation path: up until nearest common ancestor, then down
+        root_dimensions that are in current domain and NOT in domain
+            will be aggregated, then dimension will be dropped.
+        root_dimensions that are NOT in current domain but in domain
+            will be first added at dimension level and then disaggregated
+        root_dimensions that are in both will be tranformed
+        along the transformation path:
+            up until nearest common ancestor, then down
         """
 
         if not isinstance(domain, Domain):

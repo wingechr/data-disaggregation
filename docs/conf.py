@@ -4,7 +4,7 @@ import sys
 
 # import package (from setup) to get infos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from setup import pkg
+from setup import pkg  # noqa: E402
 
 project = pkg.__title__
 description = pkg.__doc__
@@ -47,7 +47,8 @@ extensions = [
     "sphinx.ext.viewcode",
     # sphinxcontrib
     "sphinxcontrib.mermaid",
-    # TODO: still not working with python 3.10: https://github.com/sphinx-contrib/napoleon/issues/9
+    # TODO: not working with python 3.10:
+    # https://github.com/sphinx-contrib/napoleon/issues/9
     # "sphinxcontrib.napoleon",  # requires sphinxcontrib-napoleon
     "m2r2",  # new md -> rst
     # "sphinx_click",  # requires sphinx-click

@@ -1,11 +1,7 @@
 import unittest
 from functools import partial
 
-from data_disaggregation.classes import (  # ExtensiveScalar,; IntensiveScalar,; ExtensiveVariable,; IntensiveVariable,; Weight,
-    Dimension,
-    Domain,
-    Variable,
-)
+from data_disaggregation.classes import Dimension, Domain, Variable
 from data_disaggregation.exceptions import DimensionStructureError, DuplicateNameError
 
 try:
@@ -77,6 +73,9 @@ class TestClasses(unittest.TestCase):
         d2 = Dimension(name="D2")
         d1a = d1.add_level(name="D1a", grouped_elements=["d11", "d12"])
         d2a = d2.add_level(name="D2a", grouped_elements=["d21", "d22"])
-        _dom = Domain([d1a, d2a])
 
-        _var = Variable(name="v", data=1, domain=None, vartype="extensive")
+        dom = Domain([d1a, d2a])
+        var = Variable(name="v", data=1, domain=None, vartype="extensive")
+        # TODO ... test case
+        assert dom
+        assert var

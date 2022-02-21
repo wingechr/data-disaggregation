@@ -1,3 +1,5 @@
+import re
+
 from setuptools import setup
 
 # short description package docstring
@@ -9,13 +11,14 @@ if __name__ == "__main__":
     with open("README.md", encoding="utf-8") as file:
         long_description = file.read()
 
+    short_description = re.sub(r"\s+", " ", pkg.__doc__).strip()
+
     setup(
         packages=["data_disaggregation"],
-        keywords=[],
-        install_requires=["numpy"],
-        # extras_require={"dev": []},
         name="data-disaggregation",
-        description=pkg.__doc__,
+        install_requires=["numpy"],
+        keywords=[],
+        description=short_description,
         long_description=long_description,
         # text/markdown or text/x-rst or text/plain
         long_description_content_type="text/markdown",
@@ -33,7 +36,7 @@ if __name__ == "__main__":
         },
         classifiers=[
             "Programming Language :: Python :: 3",
-            "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+            "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",  # noqa: E501
             "Operating System :: OS Independent",
         ],
         entry_points={

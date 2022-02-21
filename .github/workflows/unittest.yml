@@ -27,6 +27,7 @@ jobs:
 
   deploy-test:
     needs: run-tests
+    runs-on: ubuntu-latest
     steps:
       - name: check
         run: echo {{ github.ref }}

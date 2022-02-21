@@ -330,7 +330,7 @@ class Variable:
             group_matrix = self.domain.dimension_levels[0].group_matrix
             # create sum for groups. shapes: (m, n) * (n,) = (m,)
             sums = group_matrix.transpose().dot(self._data_matrix)
-            shape = (group_matrix.size[1],)
+            shape = (group_matrix.shape[1],)
             if not np.allclose(np.ones(shape), sums):
                 raise ValueError("Values in some groups don't add up to 1.0")
 

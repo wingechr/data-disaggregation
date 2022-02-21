@@ -9,7 +9,7 @@ __version__ = "0.1.3"
 __title__ = "Data Disaggregation"
 __author__ = "Christian Winger"
 __email__ = "c.winger@oeko.de"
-__copyright__ = "GPLv3+"
+__copyright__ = "MIT"
 __url__ = "https://github.com/wingechr/data-disaggregation"
 
 try:

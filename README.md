@@ -1,6 +1,8 @@
 # Data (dis)aggregation
 
 [![docs](https://img.shields.io/readthedocs/data-disaggregation)](https://data-disaggregation.readthedocs.io)
+![tests](https://github.com/wingechr/data-disaggregation/actions/workflows/unittest.yml/badge.svg)
+[![vulnerabilities](https://snyk.io/test/github/wingechr/data-disaggregation/badge.svg)](https://snyk.io/test/github/wingechr/data-disaggregation)
 
 
 ## Install

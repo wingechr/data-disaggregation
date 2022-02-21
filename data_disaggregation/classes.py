@@ -1,82 +1,71 @@
 """
 TODO: also add unit checks
 """
-import math
-from itertools import chain, product
+import logging
 from collections import OrderedDict
+from itertools import product
+
 import numpy as np
 
-# import pandas as pd
-# import networkx as nx
+from .exceptions import AggregationError, DimensionStructureError, DuplicateNameError
+from .functions import create_group_matrix, group
 
-
-def create_group_matrix(group_sizes):
-    """
-    Examples:
-    >>> create_group_matrix([1, 2])
-    array([[1., 0.],
-           [0., 1.],
-           [0., 1.]])
-    """
-    return create_weighted_group_matrix(
-        [[1] * n for n in group_sizes], on_group_sum_ne_1="ignore"
-    )
-
-
-def create_weighted_group_matrix(
-    grouped_weights, on_group_sum_ne_1="error", rel_tol=1e-09, abs_tol=0.0
-):
-    """
-    Examples:
-    >>> create_weighted_group_matrix([[1], [0.6, 0.4]])
-    array([[1. , 0. ],
-           [0. , 0.6],
-           [0. , 0.4]])
-
-    >>> create_weighted_group_matrix([[1], [6, 4]], on_group_sum_ne_1="rescale")
-    array([[1. , 0. ],
-           [0. , 0.6],
-           [0. , 0.4]])
-    """
-    assert on_group_sum_ne_1 in ("error", "ignore", "rescale")
-
-    n_rows = sum(len(gw) for gw in grouped_weights)
-    n_columns = len(grouped_weights)
-    matrix = np.zeros(shape=(n_rows, n_columns))
-    row_i_start = 0
-    for col_i, weights in enumerate(grouped_weights):
-        # check weights
-        sum_weights = sum(weights)
-        if not math.isclose(1, sum_weights, rel_tol=rel_tol, abs_tol=abs_tol):
-            if on_group_sum_ne_1 == "error":
-                raise ValueError("Sum of weights != 1")
-            elif on_group_sum_ne_1 == "rescale":
-                if not sum_weights:
-                    raise ValueError("Sum of weights == 0")
-                weights = np.array(weights) / sum_weights
-        n_rows = len(weights)
-        row_i_end = row_i_start + n_rows
-        matrix[row_i_start:row_i_end, col_i] = weights
-        row_i_start = row_i_end
-    return matrix
-
-
-def group(items):
-    result_lists = OrderedDict()
-    result_sets = OrderedDict()
-    for key, val in items:
-        if key not in result_lists:
-            result_lists[key] = []
-            result_sets[key] = set()
-        if val in result_sets[key]:
-            raise Exception("Duplicate key: %s" % val)
-        result_sets[key].add(val)
-        result_lists[key].append(val)
-    return result_lists
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 class DimensionLevel:
     """Comparable to a pd.Index, but grouped and linked to other Levels in a tree"""
+
+    @staticmethod
+    def _parse_grouped_elements(parent, grouped_elements):
+        # convert grouped_elements into dict
+        if parent.is_dimension_root:  # parent is root
+            if isinstance(grouped_elements, (list, tuple)):
+                grouped_elements = {None: grouped_elements}
+            elif pd and isinstance(grouped_elements, pd.Series):
+                grouped_elements = {None: grouped_elements.values}
+        else:
+            if pd and isinstance(grouped_elements, pd.Series):
+                grouped_elements = group(grouped_elements.iteritems())
+
+        if not isinstance(grouped_elements, dict):
+            raise DimensionStructureError(
+                """grouped_elements must be a mapping of parent to child elements.
+                    This should be either
+                    * a dict mapping parents to a list of children each
+                    * a pandas series, where (non-unique) key are parents and
+                      values are children
+                    * for the first level, it can just be a list of children
+                """
+            )
+
+        parent_elements = parent.elements
+        set_parent_elements = set(parent_elements)
+        for p in set_parent_elements:
+            if p not in grouped_elements:
+                raise DimensionStructureError("Missing elements for parent: %s for" % p)
+
+        elements = []
+        group_sizes = []
+        set_elements = set()
+        for p, elems in grouped_elements.items():
+            if p not in set_parent_elements:
+                raise DimensionStructureError("Parent does not exist: %s" % p)
+            group_size = len(elems)
+            if not group_size:
+                raise DimensionStructureError("No elements for parent: %s" % p)
+            group_sizes.append(group_size)
+            for e in elems:
+                if e in set_elements:
+                    raise DuplicateNameError("Duplicate element: %s" % e)
+                set_elements.add(e)
+                elements.append(e)
+        elements = tuple(elements)
+
+        return elements, group_sizes
 
     def __init__(self, parent, name, grouped_elements):
         self._parent = parent
@@ -85,51 +74,31 @@ class DimensionLevel:
 
         # create/check elements
         if self.is_dimension_root:
-            self._elements = tuple([None])
-            self._levels = {self.name: self}
-            group_sizes = [1]
+            elements, group_sizes = tuple([None]), [1]
+            self._levels = {}
         else:
             self._levels = self.dimension._levels  # only store once
             # register by name
             if self.name in self._levels:
-                raise KeyError("Name already used: %s" % self.name)
-            self._levels[self.name] = self
-            # register as child
-            self.parent._children[self.name] = self
+                raise DuplicateNameError(
+                    "Name for dimension level already used: %s" % self.name
+                )
+            elements, group_sizes = self._parse_grouped_elements(
+                self.parent, grouped_elements
+            )
 
-            # elements
-            if self.parent.is_dimension_root:
-                if isinstance(grouped_elements, dict):
-                    grouped_elements = {None: grouped_elements}
-                elif isinstance(grouped_elements, pd.Series):
-                    grouped_elements = {None: grouped_elements.values}
-            else:
-                if isinstance(grouped_elements, pd.Series):
-                    grouped_elements = group(grouped_elements.iteritems())
-
-            parent_elements = self.parent.elements
-            assert set(grouped_elements.keys()) == set(parent_elements)
-            grouped_elements = [grouped_elements[pe] for pe in parent_elements]
-            group_sizes = [len(g) for g in grouped_elements]
-            assert all(gs > 0 for gs in group_sizes)
-            self._elements = tuple(chain(*grouped_elements))
-            assert len(self.elements) == len(set(self.elements))
-            assert len(self.elements) > 0
-
-        # create grouping matrix
         self._group_matrix = create_group_matrix(group_sizes)
-
+        self._elements = elements
         self._size = len(self.elements)
+
         self._indices = tuple(range(self.size))
         self._element2index = dict(zip(self.elements, self.indices))
 
-    def to_graph(self):
-        gr = nx.DiGraph()
-        for level in self._levels.values():
-            gr.add_node(level.name)
-            if not level.is_dimension_root:
-                gr.add_edge(level.name, level.parent.name)
-        return gr
+        # register/link name
+        self._levels[self.name] = self
+        # register as child
+        if not self.is_dimension_root:
+            self.parent._children[self.name] = self
 
     def add_level(self, name, grouped_elements):
         return DimensionLevel(parent=self, name=name, grouped_elements=grouped_elements)
@@ -201,15 +170,16 @@ class Domain:
         # dimensions are added by dimension name!
         # TODO: what if we want multiple spacial dimensions? we could use alias,
         # but then it would be harder/impossible to automatically trnasform variables
-        self._dimension_levels = OrderedDict(
-            (d.dimension_name, d) for d in dimension_levels
-        )
-        assert len(dimension_levels) == len(self.dimension_levels)
+        self._dimension_levels = OrderedDict()
+        for d in dimension_levels:
+            key = d.dimension_name
+            if key in self._dimension_levels:
+                raise DuplicateNameError("Duplicate dimension: %s" % d)
+            self._dimension_levels[key] = d
 
         self._dimension_name2index = dict(
             (n, i) for i, n in enumerate(self.dimension_names)
         )
-        assert len(dimension_levels) == len(self._dimension_name2index)
 
         self._size = len(self.dimension_levels)
         self._shape = tuple(d.size for d in self.dimension_levels)
@@ -224,6 +194,8 @@ class Domain:
         return self._dimension_levels[dimension_name]
 
     def to_pandas_multi_index(self):
+        if not pd:
+            raise ImportError("pandas could not be imported")
         # special case scalar:
         if not self.dimensions:
             return None
@@ -308,35 +280,59 @@ class Unit:
 class Variable:
     """Comparable to pandas.Series with multiindex and/or multidimensional numpy.ndarray"""
 
-    def __init__(self, name, domain, data, unit=None, is_intensive=False):
-
-        if isinstance(domain, Domain):
-            self._domain = domain
-        else:
-            self._domain = Domain(domain)
-
-        if isinstance(data, dict):
-            self._data_matrix = self._domain.dict_to_matrix(data)
-        elif isinstance(data, list):
-            self._data_matrix = self._domain.records_to_matrix(data)
-        elif isinstance(data, pd.Series):
-            assert data.index.is_unique
-            self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
-        elif isinstance(data, np.ndarray):
-            self._data_matrix = data.copy()
-        else:
-            raise TypeError(type(data))
-
-        assert self._domain.shape == self._data_matrix.shape
+    def __init__(self, name, data, domain, vartype, unit=None):
 
         if isinstance(unit, Unit):
             self._unit = unit
         else:
             self._unit = Unit(unit)
 
-        assert is_intensive in (True, False, None)
-        self._is_intensive = is_intensive
+        if vartype not in ("intensive", "extensive", "weight"):
+            raise ValueError("vartype not in ('intensive', 'extensive', 'weight')")
+
+        self._vartype = vartype
         self._name = name
+
+        # set domain
+        if not domain:  # Scalar
+            self._domain = Domain([])
+        elif isinstance(domain, Domain):
+            self._domain = domain
+        else:
+            self._domain = Domain(domain)
+
+        # set data
+        if isinstance(data, dict):
+            self._data_matrix = self._domain.dict_to_matrix(data)
+        elif isinstance(data, list):
+            self._data_matrix = self._domain.records_to_matrix(data)
+        elif pd and isinstance(data, pd.Series):
+            if not data.index.is_unique:
+                raise KeyError("Index must be unique")
+            self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
+        elif isinstance(data, np.ndarray):
+            self._data_matrix = data.copy()
+        elif self.is_scalar and isinstance(data, (int, float)):
+            self._data_matrix = self._domain.dict_to_matrix({tuple(): data})
+        else:
+            raise TypeError(type(data))
+
+        if self._domain.shape != self._data_matrix.shape:
+            raise DimensionStructureError(
+                "Shape of data %s != shape of domain %s"
+                % (self._data_matrix.shape, self._domain.shape)
+            )
+
+        if self.is_weight:
+            if self.domain.size != 1:
+                raise DimensionStructureError("Weights must have exactly one dimension")
+            # check values
+            group_matrix = self.domain.dimension_levels[0].group_matrix
+            # create sum for groups. shapes: (m, n) * (n,) = (m,)
+            sums = group_matrix.transpose().dot(self._data_matrix)
+            shape = (group_matrix.size[1],)
+            if not np.allclose(np.ones(shape), sums):
+                raise ValueError("Values in some groups don't add up to 1.0")
 
     @property
     def name(self):
@@ -344,16 +340,20 @@ class Variable:
 
     @property
     def is_intensive(self):
-        return self._is_intensive == True
+        return self._vartype == "intensive"
 
     @property
     def is_extensive(self):
-        return self._is_intensive == False
+        return self._vartype == "extensive"
 
     @property
     def is_weight(self):
         # TODO: also: unit is None or 1
-        return self._is_intensive == None
+        return self._vartype == "weight"
+
+    @property
+    def is_scalar(self):
+        return self._domain.size == 0
 
     @property
     def domain(self):
@@ -392,72 +392,75 @@ class Variable:
         if self.is_weight:
             return self
 
-        assert self.domain.size == 1
+        if self.domain.size != 1:
+            raise DimensionStructureError("Weights must have exactly one dimension")
         dimension_level = self.domain.dimension_levels[0]
-        assert self._data_matrix.shape == (dimension_level.size,)
 
         # create sum for groups. shapes: (m, n) * (n,) = (m,)
         sums = dimension_level.group_matrix.transpose().dot(self._data_matrix)
-        assert np.all(sums != 0)
+        if not np.all(sums != 0):
+            raise ValueError("some groups add up to 0")
 
         # create inverse, repeat, sum: (m,) => (1, m) => (n, m)
         # values = np.repeat(1 / sums, dimension_level.size, axis=1)
         sums = np.reshape(1 / sums, (1, sums.size))
         sums = np.repeat(sums, dimension_level.size, axis=0)
-
-        assert sums.shape == dimension_level.group_matrix.shape
         sums = np.sum(sums * dimension_level.group_matrix, axis=1)
-
-        assert sums.shape == self._data_matrix.shape
-        weights = sums * self._data_matrix
+        data = sums * self._data_matrix
         # is_intensive=None ==> weights
         return Variable(
             name=self.name,
             domain=self.domain,
-            data=weights,
+            data=data,
             unit=None,
-            is_intensive=None,
+            vartype="weight",
         )
 
     def aggregate(self, dimension_name, weights=None):
 
-        if self.is_intensive and not weights:
-            raise Exception("intensive aggregation without weights")
+        if self.is_intensive:
+            raise AggregationError("intensive aggregation without weights")
+
         dimension_levels = list(self.domain.dimension_levels)
         dim_idx = self.domain.get_dimension_index(dimension_name)
         dim_idx_last = len(dimension_levels) - 1
         dimension_level = dimension_levels[dim_idx]
         if dimension_level.is_dimension_root:
-            raise Exception("dimension root cannot be aggregated further")
+            raise AggregationError("dimension root cannot be aggregated further")
 
         new_dimension_level = dimension_level.parent
         group_matrix = dimension_level.group_matrix
 
-        print("aggregate %s => %s" % (dimension_level, new_dimension_level))
+        logging.debug("aggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
                 len(weights.domain.dimensions) != 1
                 or weights.domain.dimension_levels[0] != new_dimension_level
             ):
-                raise Exception(
+                raise AggregationError(
                     "weights domain must be %s" % Domain([new_dimension_level])
                 )
+            if not weights.is_weight:
+                raise TypeError("weight is not of type Weight")
+
             # weights is one dimensional, and number must be the same as
             # columns in group matrix
             n_rows, n_cols = group_matrix.shape
             weights_matrix = weights._data_matrix
-            assert weights._data_matrix.shape == (n_cols,)
 
             weights_matrix = np.repeat(
                 np.reshape(weights_matrix, (1, n_cols)), n_rows, axis=0
             )
             # todo check sum of groups = 1
-            assert weights_matrix.shape == group_matrix.shape
             group_matrix *= weights_matrix
             # if group sums are all 1, sums in each row in group_matrix must be 1
             row_sums = np.sum(group_matrix, axis=1)
-            assert np.all(np.isclose(row_sums, 1))
+
+            if not np.all(np.isclose(row_sums, 1)):
+                raise ValueError(
+                    "Aggregation checksum failed. This should not happen (if weights are of type Weight"
+                )
 
         dimension_levels[dim_idx] = new_dimension_level
         new_domain = Domain(dimension_levels)
@@ -467,12 +470,16 @@ class Variable:
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            self.name, new_domain, data_matrix, self.unit, self.is_intensive
+            name=self.name,
+            domain=new_domain,
+            data=data_matrix,
+            unit=self.unit,
+            vartype=self._vartype,
         )
 
     def disaggregate(self, dimension_name, dimension_level_name, weights=None):
         if self.is_extensive and not weights:
-            raise Exception(
+            raise AggregationError(
                 "extensive disaggregation without weights for %s" % dimension_level_name
             )
 
@@ -484,7 +491,7 @@ class Variable:
         try:
             new_dimension_level = dimension_level.get_child(dimension_level_name)
         except KeyError:
-            raise Exception(
+            raise AggregationError(
                 "dimension level %s has no sublevel named %s"
                 % (dimension_level, dimension_level_name)
             )
@@ -494,65 +501,102 @@ class Variable:
 
         group_matrix = new_dimension_level.group_matrix.transpose()
 
-        print("disaggregate %s => %s" % (dimension_level, new_dimension_level))
+        logging.debug("disaggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
             if (
                 len(weights.domain.dimensions) != 1
                 or weights.domain.dimension_levels[0] != new_dimension_level
             ):
-                raise Exception(
+                raise AggregationError(
                     "weights domain must be %s" % Domain([new_dimension_level])
                 )
             # weights is one dimensional, and number must be the same as
             # columns in group matrix
             n_rows, n_cols = group_matrix.shape
             weights_matrix = weights._data_matrix
-            assert weights._data_matrix.shape == (n_cols,)
 
             weights_matrix = np.repeat(
                 np.reshape(weights_matrix, (1, n_cols)), n_rows, axis=0
             )
-            # todo check sum of groups = 1
-            assert weights_matrix.shape == group_matrix.shape
             group_matrix *= weights_matrix
             # if group sums are all 1, sums in each row in group_matrix must be 1
             row_sums = np.sum(group_matrix, axis=1)
-            assert np.all(np.isclose(row_sums, 1))
+            if not np.all(np.isclose(row_sums, 1)):
+                raise ValueError(
+                    "Aggregation checksum failed. This should not happen (if weights are of type Weight"
+                )
 
         data_matrix = np.matmul(
             self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            self.name, new_domain, data_matrix, self.unit, self.is_intensive
+            name=self.name,
+            domain=new_domain,
+            data=data_matrix,
+            unit=self.unit,
+            vartype=self._vartype,
         )
 
     def expand(self, dimension):
-        print("adding %s" % (dimension.name,))
-        assert dimension.is_dimension_root
+        if not dimension.is_dimension_root:
+            logging.warning(
+                "You should use dimension root %s instead of level %s"
+                % (dimension, dimension.dimension)
+            )
+            dimension = dimension.dimension
+
+        logging.debug("adding %s" % (dimension.name,))
         data_matrix = np.expand_dims(self._data_matrix, axis=self.domain.size)
         domain = Domain(list(self.domain.dimension_levels) + [dimension])
-        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(
+            name=self.name,
+            domain=domain,
+            data=data_matrix,
+            unit=self.unit,
+            vartype=self._vartype,
+        )
 
     def squeeze(self, dimension_name):
-        print("removing %s" % (dimension_name,))
+        logging.debug("removing %s" % (dimension_name,))
 
         dim_idx = self.domain.get_dimension_index(dimension_name)
-        assert self.domain.dimension_levels[dim_idx].is_dimension_root
+
+        if not self.domain.dimension_levels[dim_idx].is_dimension_root:
+            raise DimensionStructureError(
+                "can only squeeze dimension if it is fully aggregated"
+            )
+
         data_matrix = np.squeeze(self._data_matrix, axis=dim_idx)
         domain = Domain(
             self.domain.dimension_levels[:dim_idx]
             + self.domain.dimension_levels[dim_idx + 1 :]
         )
-        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(
+            name=self.name,
+            domain=domain,
+            data=data_matrix,
+            unit=self.unit,
+            vartype=self._vartype,
+        )
 
     def reorder(self, dimension_names):
-        assert set(dimension_names) == set(self.domain.dimension_names)
+        if set(dimension_names) != set(self.domain.dimension_names):
+            raise DimensionStructureError(
+                "reordering must contain all dimensions of origin al data"
+            )
+
         indices = [self.domain.get_dimension_index(n) for n in dimension_names]
         data_matrix = self._data_matrix.transpose(indices)
         domain = Domain([self.domain.dimension_levels[i] for i in indices])
-        return Variable(self.name, domain, data_matrix, self.unit, self.is_intensive)
+        return Variable(
+            name=self.name,
+            domain=domain,
+            data=data_matrix,
+            unit=self.unit,
+            vartype=self._vartype,
+        )
 
     def transform(self, domain, level_weights=None):
         """
@@ -626,8 +670,10 @@ class Variable:
         return str(self._data_matrix)
 
     def to_series(self):
-        # TODO: REALLY check that alignment of keys and values is correct!!
+        if not pd:
+            raise ImportError("pandas could not be imported")
 
+        # TODO: REALLY check that alignment of keys and values is correct!!
         # special case scalar
 
         # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
@@ -637,14 +683,34 @@ class Variable:
         return pd.Series(data, index=index, name=self.name)
 
 
-class Scalar(Variable):
-    def __init__(self, name, value, unit=None, is_intensive=False):
+class ExtensiveVariable(Variable):
+    def __init__(self, name, data, domain, unit=None):
         super().__init__(
-            name=name,
-            domain=[],
-            data={tuple(): value},
-            unit=unit,
-            is_intensive=is_intensive,
+            name=name, data=data, unit=unit, domain=domain, vartype="extensive"
+        )
+
+
+class IntensiveVariable(Variable):
+    def __init__(self, name, data, domain, unit=None):
+        super().__init__(
+            name=name, data=data, unit=unit, domain=domain, vartype="intensive"
+        )
+
+
+class ExtensiveScalar(ExtensiveVariable):
+    def __init__(self, name, value, unit=None):
+        super().__init__(name=name, data=value, unit=unit, domain=[])
+
+
+class IntensiveScalar(IntensiveVariable):
+    def __init__(self, name, value, unit=None):
+        super().__init__(name=name, data=value, unit=unit, domain=[])
+
+
+class Weight(Variable):
+    def __init__(self, name, data, dimension_level):
+        super().__init__(
+            name=name, data=data, unit=None, domain=[dimension_level], vartype="weight"
         )
 
 

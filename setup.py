@@ -1,4 +1,5 @@
 from setuptools import setup
+
 from docs import conf
 
 if __name__ == "__main__":
@@ -14,7 +15,8 @@ if __name__ == "__main__":
         name="data-disaggregation",
         description=conf.description,
         long_description=long_description,
-        long_description_content_type="text/markdown",  # text/markdown or text/x-rst or text/plain
+        # text/markdown or text/x-rst or text/plain
+        long_description_content_type="text/markdown",
         version=conf.version,
         author=conf.author,
         author_email=conf.email,

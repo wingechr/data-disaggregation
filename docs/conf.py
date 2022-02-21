@@ -3,7 +3,7 @@ import os
 
 project = "Data Disaggregation"
 description = "TODO SHORT DESCRIPTION"
-version = "0.0.1"
+version = "0.1.0"
 author = "Christian Winger"
 email = "c.winger@oeko.de"
 copyright = "GPLv3+"

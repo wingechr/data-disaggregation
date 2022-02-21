@@ -1,13 +1,17 @@
 # coding=utf-8
 import os
+import sys
 
-project = "Data Disaggregation"
-description = "TODO SHORT DESCRIPTION"
-version = "0.1.0"
-author = "Christian Winger"
-email = "c.winger@oeko.de"
-copyright = "GPLv3+"
-urls = {"code": "https://github.com/wingechr/data-disaggregation"}
+# import package (from setup) to get infos
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from setup import pkg
+
+project = pkg.__title__
+description = pkg.__doc__
+version = pkg.__version__
+author = pkg.__author__
+email = pkg.__email__
+copyright = pkg.__copyright__
 
 release = version
 html_search_language = "en"

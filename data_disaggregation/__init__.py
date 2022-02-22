@@ -1,5 +1,4 @@
-"""
-Wrapper classes around multidimensional numpy matrices
+"""Wrapper classes around multidimensional numpy matrices
 for (dis)aggregation of data.
 """
 

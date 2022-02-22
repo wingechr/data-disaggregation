@@ -1,7 +1,7 @@
 import unittest
 from functools import partial
 
-from data_disaggregation.classes import Dimension, Domain, Variable
+from data_disaggregation.classes import Dimension, Domain
 from data_disaggregation.exceptions import DimensionStructureError, DuplicateNameError
 
 try:
@@ -66,16 +66,3 @@ class TestClasses(unittest.TestCase):
             tuple(dom.keys),
             (("d11", "d21"), ("d11", "d22"), ("d12", "d21"), ("d12", "d22")),
         )
-
-    def test_variable(self):
-        # cannot duplicate dimensions
-        d1 = Dimension(name="D1")
-        d2 = Dimension(name="D2")
-        d1a = d1.add_level(name="D1a", grouped_elements=["d11", "d12"])
-        d2a = d2.add_level(name="D2a", grouped_elements=["d21", "d22"])
-
-        dom = Domain([d1a, d2a])
-        var = Variable(name="v", data=1, domain=None, vartype="extensive")
-        # TODO ... test case
-        assert dom
-        assert var

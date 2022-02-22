@@ -1,3 +1,6 @@
+"""Exceptions classes for this module"""
+
+
 class BaseException(Exception):
     def __init__(self, message):
         # some of our messages are long, so we write

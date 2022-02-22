@@ -1,6 +1,7 @@
+"""Wrapper classes around multidimensional numpy matrices
+for (dis)aggregation of data.
 """
-TODO: also add unit checks
-"""
+
 import logging
 from collections import OrderedDict
 from itertools import product
@@ -8,8 +9,9 @@ from itertools import product
 import numpy as np
 
 from .exceptions import AggregationError, DimensionStructureError, DuplicateNameError
-from .functions import create_group_matrix, group
+from .functions import create_group_matrix, group_unique_values
 
+# pandas is no a required dependency
 try:
     import pandas as pd
 except ImportError:
@@ -17,7 +19,63 @@ except ImportError:
 
 
 class DimensionLevel:
-    """Comparable to a pd.Index, but grouped and linked to other Levels in a tree"""
+    """Dimension at a specific hierarchy level.
+
+    Comparable to a pd.Index, but grouped and linked to other levels in a tree
+
+    Users can but should rather not instance this class directly.
+    a better way is to create a new top level Dimension and then
+    add new levels using the add_level() method.
+
+
+    Args:
+        parent(DimensionLevel): parent dimension level
+        name(str): level name
+        grouped_elements: must be a mapping of parent to child elements.
+          This should be either:
+
+          * a dict mapping parents to a list of children each
+          * a pandas series, where (non-unique) key are parents and
+            values are children
+          * for the first level, it can just be a list of children
+
+    """
+
+    def __init__(self, parent, name, grouped_elements):
+        self._parent = parent
+        self._name = name
+        self._children = dict()
+
+        # create/check elements
+        if self.is_dimension_root:
+            elements, group_sizes = tuple([None]), [1]
+            self._levels = {}
+        else:
+            self._levels = self.dimension._levels  # only store once
+            # register by name
+            if self.name in self._levels:
+                raise DuplicateNameError(
+                    "Name for dimension level already used: %s" % self.name
+                )
+            elements, group_sizes = self._parse_grouped_elements(
+                self.parent, grouped_elements
+            )
+
+        self._group_matrix = create_group_matrix(group_sizes)
+        self._elements = elements
+        self._size = len(self.elements)
+
+        self._indices = tuple(range(self.size))
+        self._element2index = dict(zip(self.elements, self.indices))
+
+        # register/link name
+        self._levels[self.name] = self
+        # register as child
+        if not self.is_dimension_root:
+            self.parent._children[self.name] = self
+
+    def __str__(self):
+        return "/".join(self.path)
 
     @staticmethod
     def _parse_grouped_elements(parent, grouped_elements):
@@ -29,7 +87,7 @@ class DimensionLevel:
                 grouped_elements = {None: grouped_elements.values}
         else:
             if pd and isinstance(grouped_elements, pd.Series):
-                grouped_elements = group(grouped_elements.iteritems())
+                grouped_elements = group_unique_values(grouped_elements.iteritems())
 
         if not isinstance(grouped_elements, dict):
             raise DimensionStructureError(
@@ -67,40 +125,20 @@ class DimensionLevel:
 
         return elements, group_sizes
 
-    def __init__(self, parent, name, grouped_elements):
-        self._parent = parent
-        self._name = name
-        self._children = dict()
-
-        # create/check elements
-        if self.is_dimension_root:
-            elements, group_sizes = tuple([None]), [1]
-            self._levels = {}
-        else:
-            self._levels = self.dimension._levels  # only store once
-            # register by name
-            if self.name in self._levels:
-                raise DuplicateNameError(
-                    "Name for dimension level already used: %s" % self.name
-                )
-            elements, group_sizes = self._parse_grouped_elements(
-                self.parent, grouped_elements
-            )
-
-        self._group_matrix = create_group_matrix(group_sizes)
-        self._elements = elements
-        self._size = len(self.elements)
-
-        self._indices = tuple(range(self.size))
-        self._element2index = dict(zip(self.elements, self.indices))
-
-        # register/link name
-        self._levels[self.name] = self
-        # register as child
-        if not self.is_dimension_root:
-            self.parent._children[self.name] = self
-
     def add_level(self, name, grouped_elements):
+        """Add a new child level.
+
+        Args:
+            name(str) name of dimension level
+            grouped_elements: must be a mapping of parent to child elements.
+              This should be either:
+
+                * a dict mapping parents to a list of children each
+                * a pandas series, where (non-unique) key are parents and
+                  values are children
+                * for the first level, it can just be a list of children
+
+        """
         return DimensionLevel(parent=self, name=name, grouped_elements=grouped_elements)
 
     def get_level(self, name):
@@ -152,17 +190,23 @@ class DimensionLevel:
         else:
             return self.parent.path + [self.name]
 
-    def __str__(self):
-        return "/".join(self.path)
-
 
 class Dimension(DimensionLevel):
+    """Dimension root level
+
+    Args:
+        name: name of dimension
+    """
+
     def __init__(self, name):
         super().__init__(parent=None, name=name, grouped_elements=None)
 
 
 class Domain:
-    """Comparaable to pandas.MultiIndex"""
+    """List of DimensionLevel
+
+    Comparable to pandas.MultiIndex
+    """
 
     def __init__(self, dimension_levels):
         dimension_levels = dimension_levels or []
@@ -186,6 +230,40 @@ class Domain:
         self._keys = tuple(product(*[d.elements for d in self.dimension_levels]))
         self._indices = tuple(product(*[d.indices for d in self.dimension_levels]))
         self._key2index = dict(zip(self.keys, self.indices))
+
+    def __str__(self):
+        dims = self._dimension_levels.items()
+        dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
+        return "(" + dims_str + ")"
+
+    def iter_indices_keys(self):
+        yield from zip(self.indices, self.keys)
+
+    def get_index(self, key):
+        return self._key2index[key]
+
+    # create data matrix from dict data
+    def dict_to_matrix(self, data):
+        d_matrix = np.zeros(shape=self.shape)
+        for key, val in data.items():
+            # TODO: create new function?
+            # fix for 1-dim
+            if not isinstance(key, tuple):
+                key = (key,)
+            idx = self.get_index(key)
+            d_matrix[idx] = val
+        return d_matrix
+
+    # create data matrix from records data
+    def records_to_matrix(self, data, value="value"):
+        dimension_level_names = self.dimension_level_names
+        data_dict = {}
+        for rec in data:
+            key = tuple(rec[n] for n in dimension_level_names)
+            if key in data_dict:
+                raise KeyError(key)
+            data_dict[key] = rec[value]
+        return self.dict_to_matrix(data_dict)
 
     def get_dimension_index(self, dimension_name):
         return self._dimension_name2index[dimension_name]
@@ -233,44 +311,6 @@ class Domain:
     def indices(self):
         return self._indices
 
-    def iter_indices_keys(self):
-        yield from zip(self.indices, self.keys)
-
-    def get_index(self, key):
-        return self._key2index[key]
-
-    def __str__(self):
-        return (
-            "("
-            + ", ".join(
-                "%s=%s(%d)" % (n, d, d.size) for n, d in self._dimension_levels.items()
-            )
-            + ")"
-        )
-
-    # create data matrix from dict data
-    def dict_to_matrix(self, data):
-        d_matrix = np.zeros(shape=self.shape)
-        for key, val in data.items():
-            # TODO: create new function?
-            # fix for 1-dim
-            if not isinstance(key, tuple):
-                key = (key,)
-            idx = self.get_index(key)
-            d_matrix[idx] = val
-        return d_matrix
-
-    # create data matrix from records data
-    def records_to_matrix(self, data, value="value"):
-        dimension_level_names = self.dimension_level_names
-        data_dict = {}
-        for rec in data:
-            key = tuple(rec[n] for n in dimension_level_names)
-            if key in data_dict:
-                raise KeyError(key)
-            data_dict[key] = rec[value]
-        return self.dict_to_matrix(data_dict)
-
 
 class Unit:
     def __init__(self, *args, **kwargs):
@@ -278,11 +318,37 @@ class Unit:
 
 
 class Variable:
-    """Comparable to pandas.Series with multiindex
-    and/or multidimensional numpy.ndarray"""
+    """Data container over a multidimensional domain.
+
+    Comparable to pandas.Series with multiindex
+    and/or multidimensional numpy.ndarray
+
+    Args:
+        name(str): name of variable
+        data: data can be passed in different ways:
+
+          * dictionary of key -> value,
+            where key is a tuple that is an element of the domain
+          * list of records. records must have fields for each
+            dimension in the domain and a column named `value`
+          * pandas Series with a MultiIndex
+          * if variable is a scalar: simple number
+
+        domain: list of DimensionLevel instances (or Domain instance)
+        vartype(str): one of "intensive", "extensive" or "weight":
+
+          * extensive variables can be simply aggregated by summing values
+            in each group
+          * intensive variables can simply be disaggregated by duplicating
+            values to all child elements in a group
+          * weights sum up to 1.0 in each group
+
+        unit(optional): not implemented yet
+          (maybe use https://pint.readthedocs.io/en/stable/)
+
+    """
 
     def __init__(self, name, data, domain, vartype, unit=None):
-
         if isinstance(unit, Unit):
             self._unit = unit
         else:
@@ -337,6 +403,7 @@ class Variable:
 
     @property
     def name(self):
+        """name of variable"""
         return self._name
 
     @property
@@ -349,7 +416,6 @@ class Variable:
 
     @property
     def is_weight(self):
-        # TODO: also: unit is None or 1
         return self._vartype == "weight"
 
     @property
@@ -453,7 +519,6 @@ class Variable:
             weights_matrix = np.repeat(
                 np.reshape(weights_matrix, (1, n_cols)), n_rows, axis=0
             )
-            # todo check sum of groups = 1
             group_matrix *= weights_matrix
             # if group sums are all 1, sums in each row in group_matrix must be 1
             row_sums = np.sum(group_matrix, axis=1)
@@ -587,6 +652,12 @@ class Variable:
         )
 
     def reorder(self, dimension_names):
+        """Return new Variable with reordered Dimensions
+
+        Args:
+            dimension_names(list): list of names of existing dimensions
+              in desired order
+        """
         if set(dimension_names) != set(self.domain.dimension_names):
             raise DimensionStructureError(
                 "reordering must contain all dimensions of origin al data"
@@ -604,7 +675,15 @@ class Variable:
         )
 
     def transform(self, domain, level_weights=None):
-        """TODO"""
+        """Main function to map variable to a new domain.
+
+        Args:
+            domain: list of DimensionLevel instances (or Domain instance)
+            level_weights(dict, optional):
+               dimension level names -> one dimensional variables that will be used
+               as weights for this level
+
+        """
 
         if not isinstance(domain, Domain):
             domain = Domain(domain)
@@ -671,6 +750,7 @@ class Variable:
         return str(self._data_matrix)
 
     def to_series(self):
+        """Return indexed pandas Series"""
         if not pd:
             raise ImportError("pandas could not be imported")
 
@@ -685,6 +765,24 @@ class Variable:
 
 
 class ExtensiveVariable(Variable):
+    """Shorthand for Variable(vartype="extensive")
+
+    Args:
+        name(str): name of variable
+        data: data can be passed in different ways:
+
+          * dictionary of key -> value, where key is a tuple that is an element
+            of the domain
+          * list of records. records must have fields for each dimension
+            in the domain and a column named `value`
+          * pandas Series with a MultiIndex
+          * if variable is a scalar: simple number
+
+        domain: list of DimensionLevel instances (or Domain instance)
+        unit(optional): not implemented yet
+
+    """
+
     def __init__(self, name, data, domain, unit=None):
         super().__init__(
             name=name, data=data, unit=unit, domain=domain, vartype="extensive"
@@ -692,27 +790,84 @@ class ExtensiveVariable(Variable):
 
 
 class IntensiveVariable(Variable):
+    """Shorthand for Variable(vartype="intensive")
+
+    Args:
+        name(str): name of variable
+        data: data can be passed in different ways:
+
+          * dictionary of key -> value,
+            where key is a tuple that is an element of the domain
+          * list of records. records must have fields for each
+            dimension in the domain and a column named `value`
+          * pandas Series with a MultiIndex
+          * if variable is a scalar: simple number
+
+        domain: list of DimensionLevel instances (or Domain instance)
+        unit(optional): not implemented yet
+
+    """
+
     def __init__(self, name, data, domain, unit=None):
         super().__init__(
             name=name, data=data, unit=unit, domain=domain, vartype="intensive"
         )
 
 
+class Weight(Variable):
+    """Shorthand for Variable(vartype="weight")
+
+    In addition, weights are special Variables with:
+    * domain is exactly one dimension
+    * values in each group add up to 1.0
+
+    Args:
+        name(str): name of variable
+        data: data can be passed in different ways:
+
+          * dictionary of key -> value,
+            where key is a tuple that is an element of the domain
+          * list of records. records must have fields for each
+            dimension in the domain and a column named `value`
+          * pandas Series with a MultiIndex
+
+        dimension_level(DimensionLevel): domain of data (weights have only one)
+        unit(optional): not implemented yet
+
+    """
+
+    def __init__(self, name, data, dimension_level):
+        super().__init__(
+            name=name, data=data, unit=None, domain=[dimension_level], vartype="weight"
+        )
+
+
 class ExtensiveScalar(ExtensiveVariable):
+    """Shorthand for ExtensiveVariable(domain=None)
+
+    Args:
+        name(str): name of variable
+        value: number
+        unit(optional): not implemented yet
+
+    """
+
     def __init__(self, name, value, unit=None):
         super().__init__(name=name, data=value, unit=unit, domain=[])
 
 
 class IntensiveScalar(IntensiveVariable):
+    """Shorthand for IntensiveVariable(domain=None)
+
+    Args:
+        name(str): name of variable
+        value: number
+        unit(optional): not implemented yet
+
+    """
+
     def __init__(self, name, value, unit=None):
         super().__init__(name=name, data=value, unit=unit, domain=[])
-
-
-class Weight(Variable):
-    def __init__(self, name, data, dimension_level):
-        super().__init__(
-            name=name, data=data, unit=None, domain=[dimension_level], vartype="weight"
-        )
 
 
 if __name__ == "__main__":

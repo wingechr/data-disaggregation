@@ -250,38 +250,37 @@ class Domain:
         self._size = len(self.dimension_levels)
         self._shape = tuple(d.size for d in self.dimension_levels)
         self._keys = tuple(product(*[d.elements for d in self.dimension_levels]))
-        self._indices = tuple(product(*[d.indices for d in self.dimension_levels]))
-        self._key2index = dict(zip(self.keys, self.indices))
+        self._indices = tuple(product(*[d._indices for d in self.dimension_levels]))
+        self._key2index = dict(zip(self._keys, self._indices))
 
     def __str__(self):
         dims = self._dimension_levels.items()
         dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
         return "(" + dims_str + ")"
 
-    def iter_indices_keys(self):
-        """TODO: docstring"""
-        yield from zip(self.indices, self.keys)
-
-    def get_index(self, key):
-        """TODO: docstring"""
-        return self._key2index[key]
-
-    # create data matrix from dict data
     def dict_to_matrix(self, data):
-        """TODO: docstring"""
+        """create data matrix from dict data
+
+        Args:
+            data(dict)
+        """
         d_matrix = np.zeros(shape=self.shape)
         for key, val in data.items():
             # TODO: create new function?
             # fix for 1-dim
             if not isinstance(key, tuple):
                 key = (key,)
-            idx = self.get_index(key)
+            idx = self._key2index[key]
             d_matrix[idx] = val
         return d_matrix
 
-    # create data matrix from records data
     def records_to_matrix(self, data, value="value"):
-        """TODO: docstring"""
+        """create data matrix from records data
+
+        Args:
+            data(list): list of records
+            value(str, optional): value column
+        """
         dimension_level_names = self.dimension_level_names
         data_dict = {}
         for rec in data:
@@ -292,62 +291,44 @@ class Domain:
         return self.dict_to_matrix(data_dict)
 
     def get_dimension_index(self, dimension_name):
-        """TODO: docstring"""
+        """get numerical index of dimension from name
+
+        Args:
+            dimension_name(str): name of dimension
+        """
         return self._dimension_name2index[dimension_name]
 
     def get_dimension_level(self, dimension_name):
-        """TODO: docstring"""
+        """get current level of dimension
+
+        Args:
+            dimension_name(str)
+        """
         return self._dimension_levels[dimension_name]
-
-    def to_pandas_multi_index(self):
-        """TODO: docstring"""
-
-        if not pd:
-            raise ImportError("pandas could not be imported")
-        # special case scalar:
-        if not self.dimensions:
-            return None
-        return pd.MultiIndex.from_tuples(self.keys, names=self.dimension_level_names)
 
     @property
     def dimension_levels(self):
-        """TODO: docstring"""
         return tuple(self._dimension_levels.values())
 
     @property
     def dimensions(self):
-        """TODO: docstring"""
         return tuple(d.dimension for d in self.dimension_levels)
 
     @property
     def dimension_names(self):
-        """TODO: docstring"""
         return tuple(d.name for d in self.dimensions)
 
     @property
     def dimension_level_names(self):
-        """TODO: docstring"""
         return tuple(d.name for d in self.dimension_levels)
 
     @property
     def size(self):
-        """TODO: docstring"""
         return self._size
 
     @property
     def shape(self):
-        """TODO: docstring"""
         return self._shape
-
-    @property
-    def keys(self):
-        """TODO: docstring"""
-        return self._keys
-
-    @property
-    def indices(self):
-        """TODO: docstring"""
-        return self._indices
 
 
 class Variable:
@@ -421,10 +402,10 @@ class Variable:
             )
 
         if self.is_weight:
-            if self.domain.size != 1:
+            if self._domain.size != 1:
                 raise DimensionStructureError("Weights must have exactly one dimension")
             # check values
-            group_matrix = self.domain.dimension_levels[0].group_matrix
+            group_matrix = self._domain.dimension_levels[0].group_matrix
             # create sum for groups. shapes: (m, n) * (n,) = (m,)
             sums = group_matrix.transpose().dot(self._data_matrix)
             shape = (group_matrix.shape[1],)
@@ -433,51 +414,46 @@ class Variable:
 
     @property
     def name(self):
-        """name of variable"""
         return self._name
 
     @property
     def is_intensive(self):
-        """TODO: docstring"""
         return self._vartype == "intensive"
 
     @property
     def is_extensive(self):
-        """TODO: docstring"""
         return self._vartype == "extensive"
 
     @property
     def is_weight(self):
-        """TODO: docstring"""
         return self._vartype == "weight"
 
     @property
     def is_scalar(self):
-        """TODO: docstring"""
         return self._domain.size == 0
 
-    @property
-    def domain(self):
-        """TODO: docstring"""
-        return self._domain
-
-    @property
-    def unit(self):
-        """TODO: docstring"""
-        return self._unit
-
     def to_dict(self, skip_0=False):
+        """Return data as an dict
+
+        Args:
+            skip_0(bool, optional): if True: do not include cells with value == 0
+        """
         res = {}
-        for idx, key in self.domain.iter_indices_keys():
+        for idx, key in zip(self._indices, self._keys):
             val = self._data_matrix[idx]
             if val or not skip_0:
                 res[key] = val
         return res
 
     def to_records(self, skip_0=False, value="value"):
-        """TODO: docstring"""
+        """Return data as an iterable of records
+
+        Args:
+            skip_0(bool, optional): if True: do not include cells with value == 0
+            value(str, optional): name of the value column
+        """
         res = []
-        dimension_level_names = self.domain.dimension_level_names
+        dimension_level_names = self._domain.dimension_level_names
         for key, val in self.to_dict(skip_0=skip_0).items():
             rec = dict(zip(dimension_level_names, key))
             rec[value] = val
@@ -485,23 +461,17 @@ class Variable:
 
         return res
 
-    def as_normalized(self):
-        """TODO: docstring"""
-        s = np.sum(self._data_matrix)
-        if not s:
-            raise Exception("sum = 0")
-        data = self._data_matrix / s
-        return Variable(self.name, self.domain, data=data, unit=None, is_intensive=True)
+    def as_weight(self, name=None):
+        """Convert variable into weight.
+        Only possible if Domain has only one dimension.
 
-    def as_weight(self):
-        """TODO: docstring"""
+        Args:
+            name(str, optional): new name
+        """
 
-        if self.is_weight:
-            return self
-
-        if self.domain.size != 1:
+        if self._domain.size != 1:
             raise DimensionStructureError("Weights must have exactly one dimension")
-        dimension_level = self.domain.dimension_levels[0]
+        dimension_level = self._domain.dimension_levels[0]
 
         # create sum for groups. shapes: (m, n) * (n,) = (m,)
         sums = dimension_level.group_matrix.transpose().dot(self._data_matrix)
@@ -520,19 +490,26 @@ class Variable:
 
         # is_intensive=None ==> weights
         return Variable(
-            name=self.name,
-            domain=self.domain,
+            name=name or self.name,
+            domain=self._domain,
             data=data,
             unit=None,
             vartype="weight",
         )
 
-    def aggregate(self, dimension_name, weights=None):
-        """TODO: docstring"""
+    def aggregate(self, dimension_name, weights=None, name=None):
+        """aggregate one dimension lvel to the next
+
+        Args:
+            dimension_name(str): name of dimension to be aggregated
+            weights(Weights, optional): weights variable for aggregation,
+              must have the the target dimension level as domain
+            name(str, optional): new name
+        """
 
         # get the current level of the dimension
-        dimension_levels = list(self.domain.dimension_levels)
-        dim_idx = self.domain.get_dimension_index(dimension_name)
+        dimension_levels = list(self._domain.dimension_levels)
+        dim_idx = self._domain.get_dimension_index(dimension_name)
         dim_idx_last = len(dimension_levels) - 1
         dimension_level = dimension_levels[dim_idx]
 
@@ -552,14 +529,14 @@ class Variable:
 
         if weights:
 
-            logging.debug("weights: %s", weights.domain)
+            logging.debug("weights: %s", weights._domain)
 
-            if weights.domain.size != 1:
+            if weights._domain.size != 1:
                 raise AggregationError("weights domain must be exacly one dimension")
-            if weights.domain.dimension_levels[0] != dimension_level:
+            if weights._domain.dimension_levels[0] != dimension_level:
                 raise AggregationError(
                     "weights domain for aggregation must be %s, not %s"
-                    % (Domain([dimension_level]), weights.domain)
+                    % (Domain([dimension_level]), weights._domain)
                 )
             if not weights.is_weight:
                 raise TypeError("weight is not of type Weight")
@@ -584,23 +561,33 @@ class Variable:
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            name=self.name,
+            name=name or self.name,
             domain=new_domain,
             data=data_matrix,
-            unit=self.unit,
+            unit=self._unit,
             vartype=self._vartype,
         )
 
-    def disaggregate(self, dimension_name, dimension_level_name, weights=None):
-        """TODO: docstring"""
+    def disaggregate(
+        self, dimension_name, dimension_level_name, weights=None, name=None
+    ):
+        """disaggregate one dimension to one of the next child levels
+
+        Args:
+            dimension_name(str): name of dimension to be disaggregated
+            dimension_level_name(str): name of new child level
+            weights(Weights, optional): weights variable for disaggregation,
+              must have the the target dimension level as domain
+            name(str, optional): new name
+        """
 
         if self.is_extensive and not weights:
             raise AggregationError(
                 "extensive disaggregation without weights for %s" % dimension_level_name
             )
 
-        dimension_levels = list(self.domain.dimension_levels)
-        dim_idx = self.domain.get_dimension_index(dimension_name)
+        dimension_levels = list(self._domain.dimension_levels)
+        dim_idx = self._domain.get_dimension_index(dimension_name)
         dim_idx_last = len(dimension_levels) - 1
         dimension_level = dimension_levels[dim_idx]
 
@@ -629,8 +616,8 @@ class Variable:
             logging.debug("weights %s", weights)
 
             if (
-                len(weights.domain.dimensions) != 1
-                or weights.domain.dimension_levels[0] != new_dimension_level
+                len(weights._domain.dimensions) != 1
+                or weights._domain.dimension_levels[0] != new_dimension_level
             ):
                 raise AggregationError(
                     "weights domain for disaggregation must be %s"
@@ -663,15 +650,21 @@ class Variable:
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            name=self.name,
+            name=name or self.name,
             domain=new_domain,
             data=data_matrix,
-            unit=self.unit,
+            unit=self._unit,
             vartype=self._vartype,
         )
 
-    def expand(self, dimension):
-        """TODO: docstring"""
+    def expand(self, dimension, name=None):
+        """add dimension on aggregated level
+
+        Args:
+            dimension(Dimension): root level dimension
+            name(str, optional): new name
+        """
+
         if not dimension.is_dimension_root:
             logging.warning(
                 "You should use dimension root %s instead of level %s"
@@ -680,38 +673,43 @@ class Variable:
             dimension = dimension.dimension
 
         logging.debug("adding %s" % (dimension.name,))
-        data_matrix = np.expand_dims(self._data_matrix, axis=self.domain.size)
-        domain = Domain(list(self.domain.dimension_levels) + [dimension])
+        data_matrix = np.expand_dims(self._data_matrix, axis=self._domain.size)
+        domain = Domain(list(self._domain.dimension_levels) + [dimension])
         return Variable(
-            name=self.name,
+            name=name or self.name,
             domain=domain,
             data=data_matrix,
-            unit=self.unit,
+            unit=self._unit,
             vartype=self._vartype,
         )
 
-    def squeeze(self, dimension_name):
-        """TODO: docstring"""
+    def squeeze(self, dimension_name, name=None):
+        """remove aggregated dimension
+
+        Args:
+            dimension_name: names of existing dimensions to be dropped
+            name(str, optional): new name
+        """
 
         logging.debug("removing %s" % (dimension_name,))
 
-        dim_idx = self.domain.get_dimension_index(dimension_name)
+        dim_idx = self._domain.get_dimension_index(dimension_name)
 
-        if not self.domain.dimension_levels[dim_idx].is_dimension_root:
+        if not self._domain.dimension_levels[dim_idx].is_dimension_root:
             raise DimensionStructureError(
                 "can only squeeze dimension if it is fully aggregated"
             )
 
         data_matrix = np.squeeze(self._data_matrix, axis=dim_idx)
         domain = Domain(
-            self.domain.dimension_levels[:dim_idx]
-            + self.domain.dimension_levels[dim_idx + 1 :]
+            self._domain.dimension_levels[:dim_idx]
+            + self._domain.dimension_levels[dim_idx + 1 :]
         )
         return Variable(
-            name=self.name,
+            name=name or self.name,
             domain=domain,
             data=data_matrix,
-            unit=self.unit,
+            unit=self._unit,
             vartype=self._vartype,
         )
 
@@ -723,19 +721,19 @@ class Variable:
               in desired order
             name(str, optional): new name
         """
-        if set(dimension_names) != set(self.domain.dimension_names):
+        if set(dimension_names) != set(self._domain.dimension_names):
             raise DimensionStructureError(
                 "reordering must contain all dimensions of origin al data"
             )
 
-        indices = [self.domain.get_dimension_index(n) for n in dimension_names]
+        indices = [self._domain.get_dimension_index(n) for n in dimension_names]
         data_matrix = self._data_matrix.transpose(indices)
-        domain = Domain([self.domain.dimension_levels[i] for i in indices])
+        domain = Domain([self._domain.dimension_levels[i] for i in indices])
         return Variable(
             name=name or self.name,
             domain=domain,
             data=data_matrix,
-            unit=self.unit,
+            unit=self._unit,
             vartype=self._vartype,
         )
 
@@ -754,9 +752,9 @@ class Variable:
         if not isinstance(domain, Domain):
             domain = Domain(domain)
 
-        add_dimensions = set(domain.dimensions) - set(self.domain.dimensions)
-        drop_dimensions = set(self.domain.dimensions) - set(domain.dimensions)
-        change_dimensions = set(self.domain.dimensions) & set(domain.dimensions)
+        add_dimensions = set(domain.dimensions) - set(self._domain.dimensions)
+        drop_dimensions = set(self._domain.dimensions) - set(domain.dimensions)
+        change_dimensions = set(self._domain.dimensions) & set(domain.dimensions)
 
         level_weights = level_weights or {}
 
@@ -775,7 +773,7 @@ class Variable:
         result = self
         for dim in drop_dimensions:
             # aggregate to root, then drop
-            path = self.domain.get_dimension_level(dim.name).path
+            path = self._domain.get_dimension_level(dim.name).path
             level_names = list(reversed(path))[1:]
             for level_name in level_names:
                 weights = get_weights(dim.get_level(level_name))
@@ -793,7 +791,7 @@ class Variable:
 
         for dim in change_dimensions:
             # aggregate up to closest common ancestor, then down
-            path_up = self.domain.get_dimension_level(dim.name).path
+            path_up = self._domain.get_dimension_level(dim.name).path
             path_down = domain.get_dimension_level(dim.name).path
             # find common part of path
             path_shared = []
@@ -829,7 +827,14 @@ class Variable:
         # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
         # flatten into array C-style
         data = self._data_matrix.flatten("C")
-        index = self.domain.to_pandas_multi_index()
+
+        if not self.dimensions:
+            index = None
+        else:
+            index = pd.MultiIndex.from_tuples(
+                self._domain._keys, names=self._domain.dimension_level_names
+            )
+
         return pd.Series(data, index=index, name=self.name)
 
 

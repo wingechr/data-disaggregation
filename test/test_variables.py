@@ -1,8 +1,10 @@
 import unittest
+from functools import partial
 
 from numpy.testing import assert_array_equal
 
-from data_disaggregation.classes import Dimension, Variable
+from data_disaggregation.classes import Dimension, IntensiveScalar, Variable
+from data_disaggregation.exceptions import AggregationError
 
 
 class TestExample(unittest.TestCase):
@@ -34,3 +36,22 @@ class TestExample(unittest.TestCase):
         )
         v2 = v1.transform(domain=[self.region])
         assert_array_equal(v2._data_matrix, [9, 5])
+
+    def test_extensive(self):
+        v1 = Variable(
+            name="v1",
+            data={1: 10, 2: 20, 3: 30, 4: 40, 5: 50},
+            domain=self.year_hour,
+            vartype="extensive",
+        )
+        v2 = v1.transform(self.time)  # should work
+        # auto disaggregate for extensive does not work
+        res = partial(v2.transform, self.year_hour)
+        self.assertRaises(AggregationError, res)
+
+    def test_intensive(self):
+        v1 = IntensiveScalar(name="v1", value=10)
+        v2 = v1.transform(self.day_hour)  # should work
+        # auto aggregate  for extensive does not work
+        res = partial(v2.transform, self.time)
+        self.assertRaises(AggregationError, res)

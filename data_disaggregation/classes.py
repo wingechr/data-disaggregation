@@ -218,10 +218,20 @@ class Domain:
     """List of DimensionLevel
 
     Comparable to pandas.MultiIndex
+
+    Args:
+        dimension_levels: either
+
+          * list of DimensionLevel
+          * a single DimensionLevel
+          * None (Scalar)
+
     """
 
     def __init__(self, dimension_levels):
         dimension_levels = dimension_levels or []
+        if isinstance(dimension_levels, DimensionLevel):
+            dimension_levels = [dimension_levels]
 
         # dimensions are added by dimension name!
         # TODO: what if we want multiple spacial dimensions? we could use alias,
@@ -687,12 +697,13 @@ class Variable:
             vartype=self._vartype,
         )
 
-    def reorder(self, dimension_names):
+    def reorder(self, dimension_names, name=None):
         """Return new Variable with reordered Dimensions
 
         Args:
             dimension_names(list): list of names of existing dimensions
               in desired order
+            name(str, optional): new name
         """
         if set(dimension_names) != set(self.domain.dimension_names):
             raise DimensionStructureError(
@@ -703,14 +714,14 @@ class Variable:
         data_matrix = self._data_matrix.transpose(indices)
         domain = Domain([self.domain.dimension_levels[i] for i in indices])
         return Variable(
-            name=self.name,
+            name=name or self.name,
             domain=domain,
             data=data_matrix,
             unit=self.unit,
             vartype=self._vartype,
         )
 
-    def transform(self, domain, level_weights=None):
+    def transform(self, domain, level_weights=None, name=None):
         """Main function to map variable to a new domain.
 
         Args:
@@ -718,6 +729,7 @@ class Variable:
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
+            name(str, optional): new name
 
         """
 
@@ -778,7 +790,7 @@ class Variable:
                 weights = weights = get_weights(dim.get_level(level_name))
                 result = result.disaggregate(dim.name, level_name, weights=weights)
 
-        result = result.reorder(domain.dimension_names)
+        result = result.reorder(domain.dimension_names, name=name)
 
         return result
 

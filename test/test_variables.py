@@ -1,10 +1,17 @@
+import logging
 import unittest
 from functools import partial
 
+import numpy as np
 from numpy.testing import assert_array_equal
 
 from data_disaggregation.classes import Dimension, IntensiveScalar, Variable
 from data_disaggregation.exceptions import AggregationError
+
+LOGGING_DATE_FMT = "%Y-%m-%d %H:%M:%S"
+LOGGING_FMT = "[%(asctime)s %(levelname)7s] %(message)s"
+
+logging.basicConfig(format=LOGGING_FMT, datefmt=LOGGING_DATE_FMT, level=logging.DEBUG)
 
 
 class TestExample(unittest.TestCase):
@@ -37,6 +44,10 @@ class TestExample(unittest.TestCase):
         v2 = v1.transform(domain=[self.region])
         assert_array_equal(v2._data_matrix, [9, 5])
 
+        v1sum = np.sum(v1._data_matrix)
+        v2sum = np.sum(v2._data_matrix)
+        self.assertTrue(np.isclose(v1sum, v2sum))
+
     def test_extensive(self):
         v1 = Variable(
             name="v1",
@@ -48,10 +59,25 @@ class TestExample(unittest.TestCase):
         # auto disaggregate for extensive does not work
         res = partial(v2.transform, self.year_hour)
         self.assertRaises(AggregationError, res)
+        # you need weights
+        v3 = v2.transform(self.year_hour, {"year_hour": v1})
+
+        v1sum = np.sum(v1._data_matrix)
+        v2sum = np.sum(v2._data_matrix)
+        v3sum = np.sum(v3._data_matrix)
+        self.assertTrue(np.isclose(v1sum, v2sum))
+        self.assertTrue(np.isclose(v1sum, v3sum))
 
     def test_intensive(self):
         v1 = IntensiveScalar(name="v1", value=10)
         v2 = v1.transform(self.day_hour)  # should work
+
         # auto aggregate  for extensive does not work
         res = partial(v2.transform, self.time)
         self.assertRaises(AggregationError, res)
+
+        v3 = v2.transform(self.year_hour, {"day_hour": v1, "day": v1})
+
+        v2sum = np.sum(v2._data_matrix)
+        v3sum = np.sum(v3._data_matrix)
+        self.assertTrue(np.isclose(v2sum, v3sum))

@@ -505,6 +505,7 @@ class Variable:
 
         # create sum for groups. shapes: (m, n) * (n,) = (m,)
         sums = dimension_level.group_matrix.transpose().dot(self._data_matrix)
+
         if not np.all(sums != 0):
             raise ValueError("some groups add up to 0")
 
@@ -512,8 +513,11 @@ class Variable:
         # values = np.repeat(1 / sums, dimension_level.size, axis=1)
         sums = np.reshape(1 / sums, (1, sums.size))
         sums = np.repeat(sums, dimension_level.size, axis=0)
+
         sums = np.sum(sums * dimension_level.group_matrix, axis=1)
+
         data = sums * self._data_matrix
+
         # is_intensive=None ==> weights
         return Variable(
             name=self.name,
@@ -526,15 +530,20 @@ class Variable:
     def aggregate(self, dimension_name, weights=None):
         """TODO: docstring"""
 
-        if self.is_intensive:
-            raise AggregationError("intensive aggregation without weights")
-
+        # get the current level of the dimension
         dimension_levels = list(self.domain.dimension_levels)
         dim_idx = self.domain.get_dimension_index(dimension_name)
         dim_idx_last = len(dimension_levels) - 1
         dimension_level = dimension_levels[dim_idx]
+
         if dimension_level.is_dimension_root:
-            raise AggregationError("dimension root cannot be aggregated further")
+            raise AggregationError(
+                "dimension cannot be aggregated further: %s" % dimension_level
+            )
+        if self.is_intensive and not weights:
+            raise AggregationError(
+                "intensive aggregation without weights on level: %s" % dimension_level
+            )
 
         new_dimension_level = dimension_level.parent
         group_matrix = dimension_level.group_matrix
@@ -542,34 +551,30 @@ class Variable:
         logging.debug("aggregate %s => %s" % (dimension_level, new_dimension_level))
 
         if weights:
-            if (
-                len(weights.domain.dimensions) != 1
-                or weights.domain.dimension_levels[0] != new_dimension_level
-            ):
+
+            logging.debug("weights: %s", weights.domain)
+
+            if weights.domain.size != 1:
+                raise AggregationError("weights domain must be exacly one dimension")
+            if weights.domain.dimension_levels[0] != dimension_level:
                 raise AggregationError(
-                    "weights domain must be %s" % Domain([new_dimension_level])
+                    "weights domain for aggregation must be %s, not %s"
+                    % (Domain([dimension_level]), weights.domain)
                 )
             if not weights.is_weight:
                 raise TypeError("weight is not of type Weight")
 
             # weights is one dimensional, and number must be the same as
             # columns in group matrix
+
             n_rows, n_cols = group_matrix.shape
             weights_matrix = weights._data_matrix
 
             weights_matrix = np.repeat(
-                np.reshape(weights_matrix, (1, n_cols)), n_rows, axis=0
+                np.reshape(weights_matrix, (n_rows, 1)), n_cols, axis=1
             )
-            group_matrix *= weights_matrix
-            # if group sums are all 1, sums in each row in group_matrix must be 1
-            row_sums = np.sum(group_matrix, axis=1)
 
-            if not np.all(np.isclose(row_sums, 1)):
-                raise ValueError(
-                    """Aggregation checksum failed.
-                    This should not happen (if weights are of type Weight)
-                    """
-                )
+            group_matrix *= weights_matrix
 
         dimension_levels[dim_idx] = new_dimension_level
         new_domain = Domain(dimension_levels)
@@ -612,16 +617,29 @@ class Variable:
 
         group_matrix = new_dimension_level.group_matrix.transpose()
 
-        logging.debug("disaggregate %s => %s" % (dimension_level, new_dimension_level))
+        logging.debug(
+            "disaggregate %s (%s) => %s",
+            dimension_level,
+            self._vartype,
+            new_dimension_level,
+        )
 
         if weights:
+
+            logging.debug("weights %s", weights)
+
             if (
                 len(weights.domain.dimensions) != 1
                 or weights.domain.dimension_levels[0] != new_dimension_level
             ):
                 raise AggregationError(
-                    "weights domain must be %s" % Domain([new_dimension_level])
+                    "weights domain for disaggregation must be %s"
+                    % Domain([new_dimension_level])
                 )
+
+            if not weights.is_weight:
+                raise TypeError("weight is not of type Weight")
+
             # weights is one dimensional, and number must be the same as
             # columns in group matrix
             n_rows, n_cols = group_matrix.shape
@@ -747,8 +765,11 @@ class Variable:
             weights = level_weights.get(level_name)
             if not weights:
                 return None
-            weights = weights.transform(Domain([dimension_level]))
-            weights = weights.as_weight()
+            try:
+                weights = weights.transform(Domain([dimension_level]))
+                weights = weights.as_weight()
+            except AggregationError:
+                raise AggregationError("Cannot transform weight: %s" % weights)
             return weights
 
         result = self
@@ -784,10 +805,10 @@ class Variable:
             path_down = path_down[n:]
             path_up = list(reversed(path_up[n:]))
             for level_name in path_up:
-                weights = weights = get_weights(dim.get_level(level_name))
+                weights = get_weights(dim.get_level(level_name))
                 result = result.aggregate(dim.name, weights=weights)
             for level_name in path_down:
-                weights = weights = get_weights(dim.get_level(level_name))
+                weights = get_weights(dim.get_level(level_name))
                 result = result.disaggregate(dim.name, level_name, weights=weights)
 
         result = result.reorder(domain.dimension_names, name=name)

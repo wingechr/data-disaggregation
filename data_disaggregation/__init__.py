@@ -14,6 +14,8 @@ __url__ = "https://github.com/wingechr/data-disaggregation"
 try:
     from .classes import (
         Dimension,
+        DimensionLevel,
+        Domain,
         ExtensiveScalar,
         ExtensiveVariable,
         IntensiveScalar,
@@ -27,6 +29,8 @@ except ImportError:
 
 __all__ = [
     "Dimension",
+    "DimensionLevel",
+    "Domain",
     "ExtensiveScalar",
     "ExtensiveVariable",
     "IntensiveScalar",

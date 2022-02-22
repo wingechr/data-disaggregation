@@ -142,49 +142,61 @@ class DimensionLevel:
         return DimensionLevel(parent=self, name=name, grouped_elements=grouped_elements)
 
     def get_level(self, name):
+        """get level by name (anywhere in the dimension)"""
         return self._levels[name]
 
     def get_child(self, name):
+        """get child level by name"""
         return self._children[name]
 
     @property
     def group_matrix(self):
+        """2 dimensional numpy matrix to group elements to the parent level"""
         return self._group_matrix.copy()
 
     @property
     def is_dimension_root(self):
+        """True if level is root level"""
         return self.parent is None
 
     @property
     def parent(self):
+        """parent level"""
         return self._parent
 
     @property
     def dimension_name(self):
+        """name of the dimension (=name of the root level)"""
         return self.dimension.name
 
     @property
     def name(self):
+        """name of the level"""
         return self._name
 
     @property
     def indices(self):
+        """indices of elements"""
         return self._indices
 
     @property
     def elements(self):
+        """list of elements"""
         return self._elements
 
     @property
     def size(self):
+        """number of elements"""
         return self._size
 
     @property
     def dimension(self):
+        """link to root level"""
         return self if self.is_dimension_root else self.parent.dimension
 
     @property
     def path(self):
+        """list of levels from root down to this level"""
         if self.is_dimension_root:
             return [self.name]
         else:
@@ -237,13 +249,16 @@ class Domain:
         return "(" + dims_str + ")"
 
     def iter_indices_keys(self):
+        """TODO: docstring"""
         yield from zip(self.indices, self.keys)
 
     def get_index(self, key):
+        """TODO: docstring"""
         return self._key2index[key]
 
     # create data matrix from dict data
     def dict_to_matrix(self, data):
+        """TODO: docstring"""
         d_matrix = np.zeros(shape=self.shape)
         for key, val in data.items():
             # TODO: create new function?
@@ -256,6 +271,7 @@ class Domain:
 
     # create data matrix from records data
     def records_to_matrix(self, data, value="value"):
+        """TODO: docstring"""
         dimension_level_names = self.dimension_level_names
         data_dict = {}
         for rec in data:
@@ -266,12 +282,16 @@ class Domain:
         return self.dict_to_matrix(data_dict)
 
     def get_dimension_index(self, dimension_name):
+        """TODO: docstring"""
         return self._dimension_name2index[dimension_name]
 
     def get_dimension_level(self, dimension_name):
+        """TODO: docstring"""
         return self._dimension_levels[dimension_name]
 
     def to_pandas_multi_index(self):
+        """TODO: docstring"""
+
         if not pd:
             raise ImportError("pandas could not be imported")
         # special case scalar:
@@ -281,40 +301,43 @@ class Domain:
 
     @property
     def dimension_levels(self):
+        """TODO: docstring"""
         return tuple(self._dimension_levels.values())
 
     @property
     def dimensions(self):
+        """TODO: docstring"""
         return tuple(d.dimension for d in self.dimension_levels)
 
     @property
     def dimension_names(self):
+        """TODO: docstring"""
         return tuple(d.name for d in self.dimensions)
 
     @property
     def dimension_level_names(self):
+        """TODO: docstring"""
         return tuple(d.name for d in self.dimension_levels)
 
     @property
     def size(self):
+        """TODO: docstring"""
         return self._size
 
     @property
     def shape(self):
+        """TODO: docstring"""
         return self._shape
 
     @property
     def keys(self):
+        """TODO: docstring"""
         return self._keys
 
     @property
     def indices(self):
+        """TODO: docstring"""
         return self._indices
-
-
-class Unit:
-    def __init__(self, *args, **kwargs):
-        pass
 
 
 class Variable:
@@ -349,10 +372,7 @@ class Variable:
     """
 
     def __init__(self, name, data, domain, vartype, unit=None):
-        if isinstance(unit, Unit):
-            self._unit = unit
-        else:
-            self._unit = Unit(unit)
+        self._unit = unit
 
         if vartype not in ("intensive", "extensive", "weight"):
             raise ValueError("vartype not in ('intensive', 'extensive', 'weight')")
@@ -408,26 +428,32 @@ class Variable:
 
     @property
     def is_intensive(self):
+        """TODO: docstring"""
         return self._vartype == "intensive"
 
     @property
     def is_extensive(self):
+        """TODO: docstring"""
         return self._vartype == "extensive"
 
     @property
     def is_weight(self):
+        """TODO: docstring"""
         return self._vartype == "weight"
 
     @property
     def is_scalar(self):
+        """TODO: docstring"""
         return self._domain.size == 0
 
     @property
     def domain(self):
+        """TODO: docstring"""
         return self._domain
 
     @property
     def unit(self):
+        """TODO: docstring"""
         return self._unit
 
     def to_dict(self, skip_0=False):
@@ -439,6 +465,7 @@ class Variable:
         return res
 
     def to_records(self, skip_0=False, value="value"):
+        """TODO: docstring"""
         res = []
         dimension_level_names = self.domain.dimension_level_names
         for key, val in self.to_dict(skip_0=skip_0).items():
@@ -449,6 +476,7 @@ class Variable:
         return res
 
     def as_normalized(self):
+        """TODO: docstring"""
         s = np.sum(self._data_matrix)
         if not s:
             raise Exception("sum = 0")
@@ -456,6 +484,8 @@ class Variable:
         return Variable(self.name, self.domain, data=data, unit=None, is_intensive=True)
 
     def as_weight(self):
+        """TODO: docstring"""
+
         if self.is_weight:
             return self
 
@@ -484,6 +514,7 @@ class Variable:
         )
 
     def aggregate(self, dimension_name, weights=None):
+        """TODO: docstring"""
 
         if self.is_intensive:
             raise AggregationError("intensive aggregation without weights")
@@ -546,6 +577,8 @@ class Variable:
         )
 
     def disaggregate(self, dimension_name, dimension_level_name, weights=None):
+        """TODO: docstring"""
+
         if self.is_extensive and not weights:
             raise AggregationError(
                 "extensive disaggregation without weights for %s" % dimension_level_name
@@ -610,6 +643,7 @@ class Variable:
         )
 
     def expand(self, dimension):
+        """TODO: docstring"""
         if not dimension.is_dimension_root:
             logging.warning(
                 "You should use dimension root %s instead of level %s"
@@ -629,6 +663,8 @@ class Variable:
         )
 
     def squeeze(self, dimension_name):
+        """TODO: docstring"""
+
         logging.debug("removing %s" % (dimension_name,))
 
         dim_idx = self.domain.get_dimension_index(dimension_name)
@@ -765,7 +801,7 @@ class Variable:
 
 
 class ExtensiveVariable(Variable):
-    """Shorthand for Variable(vartype="extensive")
+    """Shorthand for `Variable(vartype="extensive")`
 
     Args:
         name(str): name of variable
@@ -790,7 +826,7 @@ class ExtensiveVariable(Variable):
 
 
 class IntensiveVariable(Variable):
-    """Shorthand for Variable(vartype="intensive")
+    """Shorthand for `Variable(vartype="intensive")`
 
     Args:
         name(str): name of variable
@@ -815,9 +851,10 @@ class IntensiveVariable(Variable):
 
 
 class Weight(Variable):
-    """Shorthand for Variable(vartype="weight")
+    """Shorthand for `Variable(vartype="weight")`
 
     In addition, weights are special Variables with:
+
     * domain is exactly one dimension
     * values in each group add up to 1.0
 
@@ -843,7 +880,7 @@ class Weight(Variable):
 
 
 class ExtensiveScalar(ExtensiveVariable):
-    """Shorthand for ExtensiveVariable(domain=None)
+    """Shorthand for `ExtensiveVariable(domain=None)`
 
     Args:
         name(str): name of variable
@@ -857,7 +894,7 @@ class ExtensiveScalar(ExtensiveVariable):
 
 
 class IntensiveScalar(IntensiveVariable):
-    """Shorthand for IntensiveVariable(domain=None)
+    """Shorthand for `IntensiveVariable(domain=None)`
 
     Args:
         name(str): name of variable

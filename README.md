@@ -8,7 +8,6 @@
 [![release](https://img.shields.io/github/v/release/wingechr/data-disaggregation?include_prereleases)](https://github.com/wingechr/data-disaggregation/releases)
 [![pypi](https://img.shields.io/pypi/v/data-disaggregation.svg)](https://pypi.org/project/data-disaggregation)
 
-
 ## Install
 
 ```bash

@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from data_disaggregation.classes import Dimension, IntensiveScalar, Variable
+from data_disaggregation.classes import Dimension, IntensiveScalar, Variable, Weight
 from data_disaggregation.exceptions import AggregationError
 
 LOGGING_DATE_FMT = "%Y-%m-%d %H:%M:%S"
@@ -83,3 +83,20 @@ class TestExample(unittest.TestCase):
         v3sum = np.sum(v3._data_matrix)
         self.assertAlmostEqual(v2sum, v3sum)
         self.assertAlmostEqual(v2sum, 10 * 5)
+
+    def test_weights(self):
+        # this should work
+        Weight(
+            "w",
+            data={"01": 0.8, "02": 0.2, "03": 0.5, "05": 0.5},
+            dimension_level=self.day_hour,
+        )
+
+        # these should fail
+        res = partial(
+            Weight,
+            name="w",
+            data={"01": 1, "03": 1, "05": 1},
+            dimension_level=self.day_hour,
+        )
+        self.assertRaises(ValueError, res)

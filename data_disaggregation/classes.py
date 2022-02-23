@@ -64,9 +64,8 @@ class DimensionLevel:
         self._group_matrix = create_group_matrix(group_sizes)
         self._elements = elements
         self._size = len(self.elements)
-
         self._indices = tuple(range(self.size))
-        self._element2index = dict(zip(self.elements, self.indices))
+        self._element2index = dict(zip(self.elements, self._indices))
 
         # register/link name
         self._levels[self.name] = self
@@ -79,6 +78,9 @@ class DimensionLevel:
 
     @staticmethod
     def _parse_grouped_elements(parent, grouped_elements):
+        """
+        only used in __init__
+        """
         # convert grouped_elements into dict
         if parent.is_dimension_root:  # parent is root
             if isinstance(grouped_elements, (list, tuple)):
@@ -173,11 +175,6 @@ class DimensionLevel:
     def name(self):
         """name of the level"""
         return self._name
-
-    @property
-    def indices(self):
-        """indices of elements"""
-        return self._indices
 
     @property
     def elements(self):
@@ -412,25 +409,28 @@ class Variable:
             if not np.allclose(np.ones(shape), sums):
                 raise ValueError("Values in some groups don't add up to 1.0")
 
-    @property
-    def name(self):
-        return self._name
+    def __str__(self):
+        return str(self._data_matrix)
 
-    @property
-    def is_intensive(self):
-        return self._vartype == "intensive"
+    def to_series(self):
+        """Return indexed pandas Series"""
+        if not pd:
+            raise ImportError("pandas could not be imported")
 
-    @property
-    def is_extensive(self):
-        return self._vartype == "extensive"
+        # TODO: REALLY check that alignment of keys and values is correct!!
+        # special case scalar
+        # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
+        # flatten into array C-style
+        data = self._data_matrix.flatten("C")
 
-    @property
-    def is_weight(self):
-        return self._vartype == "weight"
+        if not self.dimensions:
+            index = None
+        else:
+            index = pd.MultiIndex.from_tuples(
+                self._domain._keys, names=self._domain.dimension_level_names
+            )
 
-    @property
-    def is_scalar(self):
-        return self._domain.size == 0
+        return pd.Series(data, index=index, name=self.name)
 
     def to_dict(self, skip_0=False):
         """Return data as an dict
@@ -439,7 +439,7 @@ class Variable:
             skip_0(bool, optional): if True: do not include cells with value == 0
         """
         res = {}
-        for idx, key in zip(self._indices, self._keys):
+        for idx, key in zip(self._domain._indices, self._domain._keys):
             val = self._data_matrix[idx]
             if val or not skip_0:
                 res[key] = val
@@ -461,7 +461,7 @@ class Variable:
 
         return res
 
-    def as_weight(self, name=None):
+    def to_weight(self, name=None):
         """Convert variable into weight.
         Only possible if Domain has only one dimension.
 
@@ -612,9 +612,6 @@ class Variable:
         )
 
         if weights:
-
-            logging.debug("weights %s", weights)
-
             if (
                 len(weights._domain.dimensions) != 1
                 or weights._domain.dimension_levels[0] != new_dimension_level
@@ -765,7 +762,7 @@ class Variable:
                 return None
             try:
                 weights = weights.transform(Domain([dimension_level]))
-                weights = weights.as_weight()
+                weights = weights.to_weight()
             except AggregationError:
                 raise AggregationError("Cannot transform weight: %s" % weights)
             return weights
@@ -813,29 +810,25 @@ class Variable:
 
         return result
 
-    def __str__(self):
-        return str(self._data_matrix)
+    @property
+    def name(self):
+        return self._name
 
-    def to_series(self):
-        """Return indexed pandas Series"""
-        if not pd:
-            raise ImportError("pandas could not be imported")
+    @property
+    def is_intensive(self):
+        return self._vartype == "intensive"
 
-        # TODO: REALLY check that alignment of keys and values is correct!!
-        # special case scalar
+    @property
+    def is_extensive(self):
+        return self._vartype == "extensive"
 
-        # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
-        # flatten into array C-style
-        data = self._data_matrix.flatten("C")
+    @property
+    def is_weight(self):
+        return self._vartype == "weight"
 
-        if not self.dimensions:
-            index = None
-        else:
-            index = pd.MultiIndex.from_tuples(
-                self._domain._keys, names=self._domain.dimension_level_names
-            )
-
-        return pd.Series(data, index=index, name=self.name)
+    @property
+    def is_scalar(self):
+        return self._domain.size == 0
 
 
 class ExtensiveVariable(Variable):

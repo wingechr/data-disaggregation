@@ -46,7 +46,7 @@ class TestExample(unittest.TestCase):
 
         v1sum = np.sum(v1._data_matrix)
         v2sum = np.sum(v2._data_matrix)
-        self.assertTrue(np.isclose(v1sum, v2sum))
+        self.assertAlmostEqual(v1sum, v2sum)
 
     def test_extensive(self):
         v1 = Variable(
@@ -56,6 +56,7 @@ class TestExample(unittest.TestCase):
             vartype="extensive",
         )
         v2 = v1.transform(self.time)  # should work
+
         # auto disaggregate for extensive does not work
         res = partial(v2.transform, self.year_hour)
         self.assertRaises(AggregationError, res)
@@ -65,19 +66,20 @@ class TestExample(unittest.TestCase):
         v1sum = np.sum(v1._data_matrix)
         v2sum = np.sum(v2._data_matrix)
         v3sum = np.sum(v3._data_matrix)
-        self.assertTrue(np.isclose(v1sum, v2sum))
-        self.assertTrue(np.isclose(v1sum, v3sum))
+        self.assertAlmostEqual(v1sum, v2sum)
+        self.assertAlmostEqual(v1sum, v3sum)
 
     def test_intensive(self):
         v1 = IntensiveScalar(name="v1", value=10)
-        v2 = v1.transform(self.day_hour)  # should work
+        v2 = v1.transform(self.day_hour)
+        self.assertEqual(set([10]), set(v2.to_dict().values()))
 
         # auto aggregate  for extensive does not work
         res = partial(v2.transform, self.time)
         self.assertRaises(AggregationError, res)
-
         v3 = v2.transform(self.year_hour, {"day_hour": v1, "day": v1})
 
         v2sum = np.sum(v2._data_matrix)
         v3sum = np.sum(v3._data_matrix)
-        self.assertTrue(np.isclose(v2sum, v3sum))
+        self.assertAlmostEqual(v2sum, v3sum)
+        self.assertAlmostEqual(v2sum, 10 * 5)

@@ -387,7 +387,8 @@ class Variable:
             self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
         elif isinstance(data, np.ndarray):
             self._data_matrix = data.copy()
-        elif self.is_scalar and isinstance(data, (int, float)):
+        elif self.is_scalar:
+            data = float(data)
             self._data_matrix = self._domain.dict_to_matrix({tuple(): data})
         else:
             raise TypeError(type(data))

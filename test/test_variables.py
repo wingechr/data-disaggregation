@@ -114,9 +114,23 @@ class TestExample(unittest.TestCase):
             vartype="extensive",
         )
         steps_dct = v1.get_transform_steps(domain=[self.region])
+
         steps = tuple(
-            (dim.name, tuple(tuple(s) for s in stps)) for dim, stps in steps_dct.items()
+            (
+                dim.name,
+                tuple(
+                    (
+                        f.name if f else None,
+                        t.name if t else None,
+                        a,
+                        w.name if w else None,
+                    )
+                    for f, t, a, w in stps
+                ),
+            )
+            for dim, stps in steps_dct.items()
         )
+
         self.assertEqual(
             steps,
             (

@@ -431,7 +431,7 @@ class Variable:
                 raise ValueError("Values in some groups don't add up to 1.0")
 
     def __str__(self):
-        return str(self._data_matrix)
+        return str(self.name)
 
     def to_series(self):
         """Return indexed pandas Series"""
@@ -772,6 +772,18 @@ class Variable:
             domain = Domain(domain)
         level_weights = level_weights or {}
 
+        def get_weights(dimension_level):
+            level_name = dimension_level.name
+            weights = level_weights.get(level_name)
+            if not weights:
+                return None
+            try:
+                weights = weights.transform(Domain([dimension_level]))
+                weights = weights.to_weight()
+            except AggregationError:
+                raise AggregationError("Cannot transform weight: %s" % weights)
+            return weights
+
         result = OrderedDict()
         for dim in domain.dimensions + self._domain.dimensions:
             # do not add dimension twice (if in source AND target)
@@ -797,50 +809,41 @@ class Variable:
                 squeeze = True
 
             if expand:
-                steps.append((None, dim.name, "expand", None))
+                steps.append((None, dim, "expand", None))
 
             path_up, peak, path_down = get_path_up_down(
                 source_level.path, target_level.path
             )
-            for i, p_l in enumerate(path_up):
+            for i, p_l_n in enumerate(path_up):
                 if i == len(path_up) - 1:
-                    p_u = peak
+                    p_u_n = peak
                 else:
-                    p_u = path_up[i + 1]
-
+                    p_u_n = path_up[i + 1]
+                p_l = dim.get_level(p_l_n)
+                p_u = dim.get_level(p_u_n) if p_u_n else None
                 if self.is_intensive:
-                    weight_var = level_weights.get(p_l)
-                    if not weight_var:
-                        raise AggregationError(
-                            """need a weight for intensive aggregation
-                               of %s from level %s"""
-                            % (self.name, p_l)
-                        )
-                    weight = (p_l, weight_var.name)
+                    weight = get_weights(p_l)
                 else:
                     weight = None
                 steps.append((p_l, p_u, "aggregate", weight))
 
-            for i, p_l in enumerate(path_down):
+            for i, p_l_n in enumerate(path_down):
                 if i == 0:
-                    p_u = peak
+                    p_u_n = peak
                 else:
-                    p_u = path_down[i - 1]
+                    p_u_n = path_down[i - 1]
+                p_l = dim.get_level(p_l_n) if p_l_n else None
+                p_u = dim.get_level(p_u_n)
+                weight = None
+
                 if self.is_extensive:
-                    weight_var = level_weights.get(p_l)
-                    if not weight_var:
-                        raise AggregationError(
-                            """need a weight for extensove disaggregation
-                            of %s to level %s"""
-                            % (self.name, p_l)
-                        )
-                    weight = (p_l, weight_var.name)
+                    weight = get_weights(p_l)
                 else:
                     weight = None
                 steps.append((p_u, p_l, "disaggregate", weight))
 
             if squeeze:
-                steps.append((dim.name, None, "squeeze", None))
+                steps.append((dim, None, "squeeze", None))
 
         return result
 
@@ -860,36 +863,23 @@ class Variable:
             domain = Domain(domain)
         level_weights = level_weights or {}
 
-        def get_weights(dimension_level):
-            level_name = dimension_level.name
-            weights = level_weights.get(level_name)
-            if not weights:
-                return None
-            try:
-                weights = weights.transform(Domain([dimension_level]))
-                weights = weights.to_weight()
-            except AggregationError:
-                raise AggregationError("Cannot transform weight: %s" % weights)
-            return weights
-
         result = self
         dim_steps = self.get_transform_steps(domain, level_weights=level_weights)
         for dim, steps in dim_steps.items():
             dim_name = dim.name
 
-            for (from_level, to_level, action, weight) in steps:
+            for (_from_level, to_level, action, weight) in steps:
+                print("%s, %s, %s, %s" % (_from_level, to_level, action, weight))
                 if action == "expand":
                     result = result.expand(dim)
                 elif action == "squeeze":
                     result = result.squeeze(dim_name)
                 elif action == "aggregate":
-                    if weight:
-                        weight = get_weights(dim.get_level(from_level))
                     result = result.aggregate(dim_name, weights=weight)
                 elif action == "disaggregate":
-                    if weight:
-                        weight = get_weights(dim.get_level(to_level))
-                    result = result.disaggregate(dim_name, to_level, weights=weight)
+                    result = result.disaggregate(
+                        dim_name, to_level.name, weights=weight
+                    )
                 else:
                     raise NotImplementedError(action)
 

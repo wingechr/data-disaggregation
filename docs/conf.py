@@ -1,9 +1,12 @@
 # coding=utf-8
 import os
+import sys
 
 # import package (from setup) to get infos
 # add root dir to python path (for tools lke nbsphinx)
-os.environ["PYTHONPATH"] = os.path.join(os.path.dirname(__file__), "..")
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
+os.environ["PYTHONPATH"] = BASE_DIR
+sys.path.insert(0, BASE_DIR)  # needed for import setup
 
 from setup import pkg  # noqa: E402
 

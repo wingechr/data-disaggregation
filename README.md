@@ -43,8 +43,7 @@ v1 = Variable(
 
 # transform (aggregate) fo target dimension
 v2 = v1.transform(domain=[region])
-# print as pandas series
-print(v2.to_series())
+series = v2.to_series()
 
 
 ```

@@ -869,7 +869,6 @@ class Variable:
             dim_name = dim.name
 
             for (_from_level, to_level, action, weight) in steps:
-                print("%s, %s, %s, %s" % (_from_level, to_level, action, weight))
                 if action == "expand":
                     result = result.expand(dim)
                 elif action == "squeeze":

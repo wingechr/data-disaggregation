@@ -100,3 +100,33 @@ class TestExample(unittest.TestCase):
             dimension_level=self.day_hour,
         )
         self.assertRaises(ValueError, res)
+
+    def test_transform_steps(self):
+        v1 = Variable(
+            name="v1",
+            data={
+                (1, "sr1_1"): 2,
+                (1, "sr1_2"): 3,
+                (2, "sr1_2"): 4,
+                (2, "sr2_1"): 5,
+            },
+            domain=[self.year_hour, self.subregion],
+            vartype="extensive",
+        )
+        steps_dct = v1.get_transform_steps(domain=[self.region])
+        steps = tuple(
+            (dim.name, tuple(tuple(s) for s in stps)) for dim, stps in steps_dct.items()
+        )
+        self.assertEqual(
+            steps,
+            (
+                ("space", (("subregion", "region", "aggregate", None),)),
+                (
+                    "time",
+                    (
+                        ("year_hour", "time", "aggregate", None),
+                        ("time", None, "squeeze", None),
+                    ),
+                ),
+            ),
+        )

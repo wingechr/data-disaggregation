@@ -7,6 +7,7 @@ from numpy.testing import assert_array_equal
 from data_disaggregation.functions import (
     create_group_matrix,
     create_weighted_group_matrix,
+    get_path_up_down,
     group_unique_values,
 )
 
@@ -46,3 +47,33 @@ class TestFunctions(unittest.TestCase):
         res = create_group_matrix([1, 2])
         expected_res = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0]])
         assert_array_equal(res, expected_res)
+
+    def test_get_path_up_down(self):
+        """
+        NOTE: both lists always show the LOWER level element
+        even for the so for path up, it shows the source,
+        for path down the target!
+        """
+        # no change
+        pu, p, pd = get_path_up_down([1, 2, 3], [1, 2, 3])
+        path = tuple(pu) + tuple(pd)
+        self.assertEqual(path, ())
+        self.assertEqual(p, 3)
+
+        # only down
+        pu, p, pd = get_path_up_down([1], [1, 2, 3])
+        path = tuple(pu) + tuple(pd)
+        self.assertEqual(path, (2, 3))
+        self.assertEqual(p, 1)
+
+        # only up
+        pu, p, pd = get_path_up_down([1, 2, 3], [1])
+        path = tuple(pu) + tuple(pd)
+        self.assertEqual(path, (3, 2))
+        self.assertEqual(p, 1)
+
+        # up + down
+        pu, p, pd = get_path_up_down([1, 2, 3], [1, 4, 5])
+        path = tuple(pu) + tuple(pd)
+        self.assertEqual(path, (3, 2, 4, 5))
+        self.assertEqual(p, 1)

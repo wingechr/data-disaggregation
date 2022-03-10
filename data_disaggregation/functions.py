@@ -106,3 +106,28 @@ def group_unique_values(items):
         result_sets[key].add(val)
         result_lists[key].append(val)
     return result_lists
+
+
+def get_path_up_down(path_source, path_target):
+    """paths for up/down
+
+    NOTE: both lists always show the LOWER level element
+      even for the so for path up, it shows the source,
+      for path down the target!
+
+    Args:
+        path_source(list)
+        path_target(list)
+
+    """
+    # find common part of path
+    path_shared = []
+    for pu, pd in zip(path_source, path_target):
+        if pu != pd:
+            break
+        path_shared.append(pu)
+    n = len(path_shared)  # root is always shared
+    peak = path_shared[-1]
+    path_down = path_target[n:]
+    path_up = list(reversed(path_source[n:]))
+    return path_up, peak, path_down

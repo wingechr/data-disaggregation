@@ -9,7 +9,7 @@ from itertools import product
 import numpy as np
 
 from .exceptions import AggregationError, DimensionStructureError, DuplicateNameError
-from .functions import create_group_matrix, group_unique_values
+from .functions import create_group_matrix, get_path_up_down, group_unique_values
 
 # pandas is no a required dependency
 try:
@@ -44,7 +44,7 @@ class DimensionLevel:
     def __init__(self, parent, name, grouped_elements):
         self._parent = parent
         self._name = name
-        self._children = dict()
+        self._children = OrderedDict()
 
         # create/check elements
         if self.is_dimension_root:
@@ -150,6 +150,10 @@ class DimensionLevel:
     def get_child(self, name):
         """get child level by name"""
         return self._children[name]
+
+    @property
+    def children(self):
+        return OrderedDict(self._children)
 
     @property
     def group_matrix(self):
@@ -295,6 +299,22 @@ class Domain:
         """
         return self._dimension_name2index[dimension_name]
 
+    def get_dimension(self, dimension_name):
+        """get dimension object by name
+
+        Args:
+            dimension_name(str): name of dimension
+        """
+        return self.get_dimension_level(dimension_name).dimension
+
+    def has_dimension(self, dimension_name):
+        """check if dimension is in domain
+
+        Args:
+            dimension_name(str): name of dimension
+        """
+        return dimension_name in self._dimension_levels
+
     def get_dimension_level(self, dimension_name):
         """get current level of dimension
 
@@ -366,7 +386,7 @@ class Variable:
             raise ValueError("vartype not in ('intensive', 'extensive', 'weight')")
 
         self._vartype = vartype
-        self._name = name
+        self._name = name or "UnnamedVariable"
 
         # set domain
         if not domain:  # Scalar
@@ -735,6 +755,95 @@ class Variable:
             vartype=self._vartype,
         )
 
+    def get_transform_steps(self, domain, level_weights=None):
+        """
+        Args:
+            domain: list of DimensionLevel instances (or Domain instance)
+            level_weights(dict, optional):
+               dimension level names -> one dimensional variables that will be used
+               as weights for this level
+        Returns:
+            OrderedDict: dimension -> steps
+              * each element contains steps for a dimension
+              * dimensions are all dimensions in source and target domain
+              * each step is (from_level, to_level, action, (weight_level, weight_var))
+        """
+        if not isinstance(domain, Domain):
+            domain = Domain(domain)
+        level_weights = level_weights or {}
+
+        result = OrderedDict()
+        for dim in domain.dimensions + self._domain.dimensions:
+            # do not add dimension twice (if in source AND target)
+            if dim in result:
+                continue
+            steps = []
+            result[dim] = steps
+
+            try:
+                source_level = self._domain.get_dimension_level(dim.name)
+                expand = False
+            except KeyError:
+                # new dimension => first step is to add (expand)
+                source_level = dim
+                expand = True
+
+            try:
+                target_level = domain.get_dimension_level(dim.name)
+                squeeze = False
+            except KeyError:
+                # remove dimension => last step is to remove (squeeze)
+                target_level = dim
+                squeeze = True
+
+            if expand:
+                steps.append((None, dim.name, "expand", None))
+
+            path_up, peak, path_down = get_path_up_down(
+                source_level.path, target_level.path
+            )
+            for i, p_l in enumerate(path_up):
+                if i == len(path_up) - 1:
+                    p_u = peak
+                else:
+                    p_u = path_up[i + 1]
+
+                if self.is_intensive:
+                    weight_var = level_weights.get(p_l)
+                    if not weight_var:
+                        raise AggregationError(
+                            """need a weight for intensive aggregation
+                               of %s from level %s"""
+                            % (self.name, p_l)
+                        )
+                    weight = (p_l, weight_var.name)
+                else:
+                    weight = None
+                steps.append((p_l, p_u, "aggregate", weight))
+
+            for i, p_l in enumerate(path_down):
+                if i == 0:
+                    p_u = peak
+                else:
+                    p_u = path_down[i - 1]
+                if self.is_extensive:
+                    weight_var = level_weights.get(p_l)
+                    if not weight_var:
+                        raise AggregationError(
+                            """need a weight for extensove disaggregation
+                            of %s to level %s"""
+                            % (self.name, p_l)
+                        )
+                    weight = (p_l, weight_var.name)
+                else:
+                    weight = None
+                steps.append((p_u, p_l, "disaggregate", weight))
+
+            if squeeze:
+                steps.append((dim.name, None, "squeeze", None))
+
+        return result
+
     def transform(self, domain, level_weights=None, name=None):
         """Main function to map variable to a new domain.
 
@@ -749,11 +858,6 @@ class Variable:
 
         if not isinstance(domain, Domain):
             domain = Domain(domain)
-
-        add_dimensions = set(domain.dimensions) - set(self._domain.dimensions)
-        drop_dimensions = set(self._domain.dimensions) - set(domain.dimensions)
-        change_dimensions = set(self._domain.dimensions) & set(domain.dimensions)
-
         level_weights = level_weights or {}
 
         def get_weights(dimension_level):
@@ -769,46 +873,27 @@ class Variable:
             return weights
 
         result = self
-        for dim in drop_dimensions:
-            # aggregate to root, then drop
-            path = self._domain.get_dimension_level(dim.name).path
-            level_names = list(reversed(path))[1:]
-            for level_name in level_names:
-                weights = get_weights(dim.get_level(level_name))
-                result = result.aggregate(dim.name, weights=weights)
-            result = result.squeeze(dim.name)
+        dim_steps = self.get_transform_steps(domain, level_weights=level_weights)
+        for dim, steps in dim_steps.items():
+            dim_name = dim.name
 
-        for dim in add_dimensions:
-            # add, then disaggregate
-            result = result.expand(dim)
-            path = domain.get_dimension_level(dim.name).path
-            level_names = path[1:]
-            for level_name in level_names:
-                weights = get_weights(dim.get_level(level_name))
-                result = result.disaggregate(dim.name, level_name, weights=weights)
-
-        for dim in change_dimensions:
-            # aggregate up to closest common ancestor, then down
-            path_up = self._domain.get_dimension_level(dim.name).path
-            path_down = domain.get_dimension_level(dim.name).path
-            # find common part of path
-            path_shared = []
-            for pu, pd in zip(path_up, path_down):
-                if pu != pd:
-                    break
-                path_shared.append(pu)
-            n = len(path_shared)  # root is always shared
-            path_down = path_down[n:]
-            path_up = list(reversed(path_up[n:]))
-            for level_name in path_up:
-                weights = get_weights(dim.get_level(level_name))
-                result = result.aggregate(dim.name, weights=weights)
-            for level_name in path_down:
-                weights = get_weights(dim.get_level(level_name))
-                result = result.disaggregate(dim.name, level_name, weights=weights)
+            for (from_level, to_level, action, weight) in steps:
+                if action == "expand":
+                    result = result.expand(dim)
+                elif action == "squeeze":
+                    result = result.squeeze(dim_name)
+                elif action == "aggregate":
+                    if weight:
+                        weight = get_weights(dim.get_level(from_level))
+                    result = result.aggregate(dim_name, weights=weight)
+                elif action == "disaggregate":
+                    if weight:
+                        weight = get_weights(dim.get_level(to_level))
+                    result = result.disaggregate(dim_name, to_level, weights=weight)
+                else:
+                    raise NotImplementedError(action)
 
         result = result.reorder(domain.dimension_names, name=name)
-
         return result
 
     @property

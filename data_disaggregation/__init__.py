@@ -4,7 +4,7 @@ for (dis)aggregation of data.
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 __title__ = "Data Disaggregation"
 __author__ = "Christian Winger"
 __email__ = "c.winger@oeko.de"

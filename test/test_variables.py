@@ -144,3 +144,16 @@ class TestExample(unittest.TestCase):
                 ),
             ),
         )
+
+    def test_to_series(self):
+        v1 = Variable(
+            name="v1",
+            data={1: 10},
+            domain=self.year_hour,
+            vartype="extensive",
+        )
+        try:
+            series = v1.to_series()
+        except ImportError:
+            return  # pandas not installed
+        self.assertEqual(10, series[1])

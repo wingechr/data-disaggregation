@@ -444,7 +444,7 @@ class Variable:
         # flatten into array C-style
         data = self._data_matrix.flatten("C")
 
-        if not self.dimensions:
+        if not self._domain.dimensions:
             index = None
         else:
             index = pd.MultiIndex.from_tuples(

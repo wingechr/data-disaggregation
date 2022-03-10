@@ -3,3 +3,4 @@ sphinxcontrib-mermaid
 m2r2
 nbsphinx
 ipykernel
+pandas

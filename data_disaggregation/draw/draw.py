@@ -7,7 +7,6 @@ from ..exceptions import ProgramNotFoundError
 
 def get_dot_cmd(filetype="png", dpi=300, **kwargs):
     # use neato -n for pre-calculated positions
-    # return ["dot", "-Kneato", "-n", "-T%s" % filetype, "-Gdpi=%d" % dpi]
     return ["dot", "-T%s" % filetype, "-Gdpi=%d" % dpi]
 
 
@@ -120,49 +119,34 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         nid = get_id(dim_lev)
         pid = get_id(parent)
         ids_down = (pid, nid)
-        nname = dim_lev.name
 
         edge_attr = {}
         node_attr = {"xlabel": dim_lev.name}
 
-        if nname == transf["node_start"]:
+        if dim_lev == transf["node_start"]:
             node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
-        if nname == transf["node_end"]:
+        if dim_lev == transf["node_end"]:
             node_attr.update({"fillcolor": "#a0a0f0", "style": "filled"})
-        elif nname in transf["nodes_path"]:
+        elif dim_lev in transf["nodes_path"]:
             node_attr.update({"fillcolor": "#a0a0a0", "style": "filled"})
         else:
             pass
 
         if not parent:  # dim level
-            edge_key_down = (None, dim_lev.name)
+            edge_key_down = (None, dim_lev)
             if transf["squeeze"]:
                 node_attr.update(
-                    {
-                        # "fillcolor": "#f0a0a0",
-                        # "style": "filled",
-                        "shape": "house"
-                    }
+                    {"fillcolor": "#f0a0a0", "style": "filled", "shape": "house"}
                 )
             elif transf["expand"]:
                 node_attr.update(
-                    {
-                        # "fillcolor": "#f0f0a0",
-                        # "style": "filled",
-                        "shape": "invhouse"
-                    }
+                    {"fillcolor": "#a0f0a0", "style": "filled", "shape": "invhouse"}
                 )
             else:
-                node_attr.update(
-                    {
-                        # "fillcolor": "#f0f0a0",
-                        # "style": "filled",
-                        "shape": "box"
-                    }
-                )
+                node_attr.update({"shape": "box"})
 
         else:
-            edge_key_down = (parent.name, dim_lev.name)
+            edge_key_down = (parent, dim_lev)
 
         edge_key_up = tuple(reversed(edge_key_down))
 
@@ -234,7 +218,7 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         components.append("}")
 
     for dim in dim_steps.keys():
-        # root edg
+        # root edge
         edge_attr = {"style": "dotted"}  # invisible edge from root node
         nid = get_id(dim)
         pid = get_id(None)

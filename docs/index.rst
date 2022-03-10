@@ -8,4 +8,5 @@ Table of content
 
    readme
    concept
+   example
    api

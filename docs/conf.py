@@ -1,9 +1,10 @@
 # coding=utf-8
 import os
-import sys
 
 # import package (from setup) to get infos
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# add root dir to python path (for tools lke nbsphinx)
+os.environ["PYTHONPATH"] = os.path.join(os.path.dirname(__file__), "..")
+
 from setup import pkg  # noqa: E402
 
 project = pkg.__title__
@@ -52,6 +53,7 @@ extensions = [
     "sphinxcontrib.napoleon",  # requires sphinxcontrib-napoleon
     "m2r2",  # new md -> rst
     # "sphinx_click",  # requires sphinx-click
+    "nbsphinx",
 ]
 
 # Napoleon settings

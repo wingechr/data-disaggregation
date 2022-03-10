@@ -1,3 +1,5 @@
 sphinxcontrib-napoleon
 sphinxcontrib-mermaid
 m2r2
+nbsphinx
+data_disaggregation

@@ -845,6 +845,10 @@ class Variable:
             if squeeze:
                 steps.append((dim, None, "squeeze", None))
 
+            if not steps:
+                # no change: still add a dummy step (for visualization)
+                steps.append((source_level, source_level, "keep", None))
+
         return result
 
     def transform(self, domain, level_weights=None, name=None):
@@ -879,6 +883,9 @@ class Variable:
                     result = result.disaggregate(
                         dim_name, to_level.name, weights=weight
                     )
+                elif action == "keep":
+                    # do nothing
+                    pass
                 else:
                     raise NotImplementedError(action)
 

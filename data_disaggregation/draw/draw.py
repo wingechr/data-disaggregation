@@ -68,7 +68,12 @@ def get_dot_str(components):
     return "digraph{\n%s\n}" % components_str
 
 
-def draw_transform(dim_steps, filetype="png", dpi=300):
+def draw_domain(variable, filetype="png", dpi=150):
+    steps = variable.get_transform_steps(variable._domain)
+    return draw_transform(steps, filetype=filetype, dpi=dpi)
+
+
+def draw_transform(dim_steps, filetype="png", dpi=150):
     """
     Args:
         dim_steps(OrderedDict): dimension -> steps
@@ -131,10 +136,13 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
 
         if dim_lev == transf["node_start"]:
             node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
-        if dim_lev == transf["node_end"]:
+        elif dim_lev == transf["node_end"]:
             node_attr.update({"fillcolor": "#a0a0f0", "style": "filled"})
+        elif dim_lev == transf["node_keep"]:
+            node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
         elif dim_lev in transf["nodes_path"]:
             node_attr.update({"fillcolor": "#a0a0a0", "style": "filled"})
+
         else:
             pass
 
@@ -185,18 +193,21 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
             "expand": False,
             "node_start": None,
             "node_end": None,
+            "node_keep": None,
             "nodes_path": set(),
             "edges_weight": {},
         }
 
         for from_level, to_level, action, weight in steps:
-            if from_level:
-                transf["nodes_path"].add(from_level)
-                if not transf["node_start"]:
-                    transf["node_start"] = from_level
-            if to_level:
-                transf["nodes_path"].add(to_level)
-                transf["node_end"] = to_level
+            if action != "keep":
+                if from_level:
+                    transf["nodes_path"].add(from_level)
+                    if not transf["node_start"]:
+                        transf["node_start"] = from_level
+                if to_level:
+                    transf["nodes_path"].add(to_level)
+                    transf["node_end"] = to_level
+
             if action == "aggregate":
                 transf["edges_up"].add((from_level, to_level))
             elif action == "disaggregate":
@@ -205,18 +216,21 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
                 transf["squeeze"] = True
             elif action == "expand":
                 transf["expand"] = True
+            elif action == "keep":
+                # from_level == to_level
+                transf["node_keep"] = from_level
             else:
                 raise NotImplementedError(action)
+
+            if weight:
+                key = (from_level, to_level)
+                transf["edges_weight"][key] = weight
 
         if transf["node_start"]:
             transf["nodes_path"].remove(transf["node_start"])
 
         if transf["node_end"]:
             transf["nodes_path"].remove(transf["node_end"])
-
-        if weight:
-            key = (from_level, to_level)
-            transf["edges_weight"][key] = weight
 
         dim_components = []
         add_rec(dim, transf, dim_components)

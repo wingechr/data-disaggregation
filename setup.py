@@ -1,6 +1,6 @@
 import re
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 # short description package docstring
 import data_disaggregation as pkg
@@ -14,7 +14,7 @@ if __name__ == "__main__":
     short_description = re.sub(r"\s+", " ", pkg.__doc__).strip()
 
     setup(
-        packages=["data_disaggregation"],
+        packages=find_packages(),
         name="data-disaggregation",
         install_requires=["numpy"],
         keywords=[],

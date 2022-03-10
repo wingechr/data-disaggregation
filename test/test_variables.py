@@ -6,7 +6,8 @@ import numpy as np
 from numpy.testing import assert_array_equal
 
 from data_disaggregation.classes import Dimension, IntensiveScalar, Variable, Weight
-from data_disaggregation.exceptions import AggregationError
+from data_disaggregation.draw import draw_transform
+from data_disaggregation.exceptions import AggregationError, ProgramNotFoundError
 
 LOGGING_DATE_FMT = "%Y-%m-%d %H:%M:%S"
 LOGGING_FMT = "[%(asctime)s %(levelname)7s] %(message)s"
@@ -157,3 +158,22 @@ class TestExample(unittest.TestCase):
         except ImportError:
             return  # pandas not installed
         self.assertEqual(10, series[1])
+
+    def test_draw_get_image_bytes(self):
+        v1 = Variable(
+            name="v1",
+            data={
+                (1, "sr1_1"): 2,
+                (1, "sr1_2"): 3,
+                (2, "sr1_2"): 4,
+                (2, "sr2_1"): 5,
+            },
+            domain=[self.year_hour, self.subregion],
+            vartype="extensive",
+        )
+        steps = v1.get_transform_steps(domain=[self.region])
+        try:
+            image_bytes = draw_transform(steps)
+        except ProgramNotFoundError:
+            return  # dot not in PATH
+        self.assertEqual(type(image_bytes), bytes)

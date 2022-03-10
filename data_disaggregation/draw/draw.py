@@ -2,6 +2,8 @@ import logging
 import subprocess as sp
 from tempfile import NamedTemporaryFile
 
+from ..exceptions import ProgramNotFoundError
+
 
 def get_dot_cmd(filetype="png", dpi=300, **kwargs):
     # use neato -n for pre-calculated positions
@@ -14,7 +16,7 @@ def get_image_bytes(dot_cmd, dot_str):
     try:
         proc = sp.Popen(dot_cmd, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
     except FileNotFoundError:
-        raise FileNotFoundError(dot_cmd[0])
+        raise ProgramNotFoundError(dot_cmd[0])
     out_img, err = proc.communicate(input=dot_str.encode())
     err_msg = err.decode()
     if err_msg:
@@ -220,8 +222,7 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         if transf["node_end"]:
             transf["nodes_path"].remove(transf["node_end"])
 
-        if weight:
-            transf["weight"] = weight[1]
+        transf["weight"] = weight
 
         dim_components = []
         add_rec(dim, transf, dim_components)

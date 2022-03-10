@@ -20,3 +20,7 @@ class DuplicateNameError(BaseException):
 
 class DimensionStructureError(BaseException):
     pass
+
+
+class ProgramNotFoundError(BaseException):
+    pass

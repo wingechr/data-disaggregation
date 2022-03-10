@@ -91,7 +91,13 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         ),
         (
             "edge",
-            {"dir": "both", "arrowhead": "none", "arrowtail": "none", "fontsize": 8},
+            {
+                "dir": "both",
+                "arrowhead": "none",
+                "arrowtail": "none",
+                "arrowsize": 0.2,
+                "fontsize": 8,
+            },
         ),
     ]
 
@@ -107,7 +113,7 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
             get_id(None),
             {
                 "shape": "circle",
-                "fillcolor": "#000000",
+                "color": "#a0a0a0",
                 "style": "filled",
                 "width": 0.05,
                 "height": 0.05,
@@ -120,8 +126,8 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         pid = get_id(parent)
         ids_down = (pid, nid)
 
-        edge_attr = {}
-        node_attr = {"xlabel": dim_lev.name}
+        edge_attr = {"color": "#a0a0a0"}
+        node_attr = {"color": "#a0a0a0", "xlabel": dim_lev.name}
 
         if dim_lev == transf["node_start"]:
             node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
@@ -151,11 +157,13 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         edge_key_up = tuple(reversed(edge_key_down))
 
         if edge_key_down in transf["edges_down"] or edge_key_up in transf["edges_down"]:
-            edge_attr["arrowhead"] = "normal"
+            edge_attr.update({"arrowhead": "normal", "style": "bold"})
         elif edge_key_down in transf["edges_up"] or edge_key_up in transf["edges_up"]:
-            edge_attr["arrowtail"] = "normal"
+            edge_attr.update({"arrowtail": "normal", "style": "bold"})
 
-        weight = transf.get("weight")
+        weight = transf["edges_weight"].get(edge_key_down) or transf[
+            "edges_weight"
+        ].get(edge_key_up)
         if weight:
             edge_attr.update({"xlabel": weight})
 
@@ -178,7 +186,7 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
             "node_start": None,
             "node_end": None,
             "nodes_path": set(),
-            "weight": None,
+            "edges_weight": {},
         }
 
         for from_level, to_level, action, weight in steps:
@@ -206,7 +214,9 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
         if transf["node_end"]:
             transf["nodes_path"].remove(transf["node_end"])
 
-        transf["weight"] = weight
+        if weight:
+            key = (from_level, to_level)
+            transf["edges_weight"][key] = weight
 
         dim_components = []
         add_rec(dim, transf, dim_components)
@@ -219,7 +229,10 @@ def draw_transform(dim_steps, filetype="png", dpi=300):
 
     for dim in dim_steps.keys():
         # root edge
-        edge_attr = {"style": "dotted"}  # invisible edge from root node
+        edge_attr = {
+            "style": "dotted",
+            "color": "#a0a0a0",
+        }  # invisible edge from root node
         nid = get_id(dim)
         pid = get_id(None)
         ids_down = (pid, nid)

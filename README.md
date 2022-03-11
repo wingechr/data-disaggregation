@@ -7,6 +7,7 @@
 [![license](https://img.shields.io/github/license/wingechr/data-disaggregation)](https://github.com/wingechr/data-disaggregation/blob/main/LICENSE)
 [![release](https://img.shields.io/github/v/release/wingechr/data-disaggregation?include_prereleases)](https://github.com/wingechr/data-disaggregation/releases)
 [![pypi](https://img.shields.io/pypi/v/data-disaggregation.svg)](https://pypi.org/project/data-disaggregation)
+[![snyk](https://snyk.io/test/github/wingechr/data-disaggregation/badge.svg)](https://snyk.io/test/github/wingechr/data-disaggregation)
 
 ## Install
 

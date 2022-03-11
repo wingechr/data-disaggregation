@@ -157,7 +157,7 @@ class TestExample(unittest.TestCase):
             series = v1.to_series()
         except ImportError:
             return  # pandas not installed
-        self.assertEqual(10, series[1])
+        self.assertEqual(10, int(series[1]))
 
     def test_draw_get_image_bytes(self):
         v1 = Variable(

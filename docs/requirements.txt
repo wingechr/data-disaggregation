@@ -4,5 +4,3 @@ m2r2
 nbsphinx
 ipykernel
 pandas
-# https://app.snyk.io/vuln/SNYK-PYTHON-MISTUNE-2328096
-mistune>=2.0.1

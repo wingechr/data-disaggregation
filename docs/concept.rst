@@ -10,29 +10,41 @@ Concepts
 -  hierarchies all start at a single scalar root
 -  example for alternative hierarchies for a time dimension
 
-.. mermaid::
+.. graphviz::
 
-    graph TD;
-        * --- Jan;
-        * --- Feb;
-        * --- *...[...];
-        * --- Dec;
-        Jan --- 01-01;
-        Jan --- 01-02;
-        Jan --- 01...[...];
-        Jan --- 01-31;
-        01-31 --- 00:00;
-        01-31 --- 01:00;
-        01-31 --- 01-31...[...];
-        01-31 --- 23:00;
+    digraph foo {
+        graph[bgcolor="transparent"];
 
-.. mermaid::
+        "*..."[label="..."];
+        "01..."[label="..."];
+        "01-31..."[label="..."];
 
-    graph TD;
-        * --- 1;
-        * --- 2;
-        * --- *...[...];
-        * --- 8760;
+        "*" -> "Jan";
+        "*" -> "Feb";
+        "*" -> "*...";
+        "*" -> "Dec";
+        "Jan" -> "01-01";
+        "Jan" -> "01-02";
+        "Jan" -> "01...";
+        "Jan" -> "01-31";
+        "01-31" -> "00:00";
+        "01-31" -> "01:00";
+        "01-31" -> "01-31...";
+        "01-31" -> "23:00";
+    }
+
+.. graphviz::
+
+    digraph foo {
+        graph[bgcolor="transparent"];
+
+        "*..."[label="..."];
+
+        "*" -> "1";
+        "*" -> "2";
+        "*" -> "*...";
+        "*" -> "8760";
+    }
 
 -  Disaggregation maps data from one level in a hierarchy to the next
    one further down, aggregation to the next one up conversely, using
@@ -48,64 +60,74 @@ Disaggregation (extensive) from A to B
 Example: Distribute population by area (factors are shares of sub-areas
 to total area)
 
-.. mermaid::
+.. graphviz::
 
-    graph TD;
-        * --- A1;
-        * --- A2;
-        A1 -- 0.5 --> B1;
-        A1 -- 0.5 --> B2;
-        A2 -- 0.4 --> B3;
-        A2 -- 0.4 --> B4;
-        A2 -- 0.2 --> B5;
+    digraph foo {
+        graph[bgcolor="transparent"];
+
+        "*" -> "A1";
+        "*" -> "A2";
+        "A1" -> "B1" [label="0.5"];
+        "A1" -> "B2" [label="0.5"];
+        "A2" -> "B3" [label="0.4"];
+        "A2" -> "B4" [label="0.4"];
+        "A2" -> "B5" [label="0.2"];
+    }
 
 Aggregation (extensive) from B to A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Example: Aggregate population (simply add up)
 
-.. mermaid::
+.. graphviz::
 
-    flowchart TD;
-        B1 -- 1 --> A1;
-        B2 -- 1 --> A1;
-        B3 -- 1 --> A2;
-        B4 -- 1 --> A2;
-        B5 -- 1 --> A2;
-        A1 --- *
-        A2 --- *
+    digraph foo {
+        graph[bgcolor="transparent"];
+
+        "B1" -> "A1" [label="1"];
+        "B2" -> "A1" [label="1"];
+        "B3" -> "A2" [label="1"];
+        "B4" -> "A2" [label="1"];
+        "B5" -> "A2" [label="1"];
+        "A1" -> "*"
+        "A2" -> "*"
+    }
 
 Disaggregation (intensive) from A to B
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Example: Solar radiation
 
-.. mermaid::
+.. graphviz::
 
-    graph TD;
-        * --- A1;
-        * --- A2;
-        A1 -- 1 --> B1;
-        A1 -- 1 --> B2;
-        A2 -- 1 --> B3;
-        A2 -- 1 --> B4;
-        A2 -- 1 --> B5;
+    digraph foo {
+        graph[bgcolor="transparent"];
+        "*" -> "A1";
+        "*" -> "A2";
+        "A1" -> B1 [label="1"];
+        "A1" -> B2 [label="1"];
+        "A2" -> B3 [label="1"];
+        "A2" -> B4 [label="1"];
+        "A2" -> B5 [label="1"];
+    }
 
 Aggregation (intensive) from B to A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Example: Solar radiation (weighted average by area)
 
-.. mermaid::
+.. graphviz::
 
-    flowchart TD;
-        B1 -- 0.5 --> A1;
-        B2 -- 0.5 --> A1;
-        B3 -- 0.4 --> A2;
-        B4 -- 0.4 --> A2;
-        B5 -- 0.2 --> A2;
-        A1 --- *
-        A2 --- *
+    digraph foo {
+        graph[bgcolor="transparent"];
+        "B1" -> "A1" [label="0.5"];
+        "B2" -> "A1" [label="0.5"];
+        "B3" -> "A2" [label="0.4"];
+        "B4" -> "A2" [label="0.4"];
+        "B5" -> "A2" [label="0.2"];
+        "A1" -> "*"
+        "A2" -> "*"
+    }
 
 Calculations
 ------------

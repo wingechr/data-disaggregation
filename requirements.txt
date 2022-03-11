@@ -1,2 +1,3 @@
-# just install from setup.py
-.
+numpy
+# optional (for additional features)
+pandas

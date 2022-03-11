@@ -49,8 +49,9 @@ extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
+    "sphinx.ext.graphviz",
     # sphinxcontrib
-    "sphinxcontrib.mermaid",
+    # "sphinxcontrib.mermaid",
     # TODO: not working with python 3.10:
     # https://github.com/sphinx-contrib/napoleon/issues/9
     "sphinxcontrib.napoleon",  # requires sphinxcontrib-napoleon
@@ -92,6 +93,8 @@ mathjax_config = {
     "displayAlign": "left",
 }
 
+# graphviz
+graphviz_output_format = "svg"  # svg | png
 
 # fix warnings about docstring referencing builtin types
 nitpick_ignore = [

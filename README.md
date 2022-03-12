@@ -31,7 +31,6 @@ subregion = region.add_level(
 
 # create extensive variable
 v1 = Variable(
-    name="v1",
     data={
         (1, "sr1_1"): 2,
         (1, "sr1_2"): 3,

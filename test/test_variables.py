@@ -32,7 +32,6 @@ class TestExample(unittest.TestCase):
 
     def test_transform1(self):
         v1 = Variable(
-            name="v1",
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,
@@ -51,7 +50,6 @@ class TestExample(unittest.TestCase):
 
     def test_extensive(self):
         v1 = Variable(
-            name="v1",
             data={1: 10, 2: 20, 3: 30, 4: 40, 5: 50},
             domain=self.year_hour,
             vartype="extensive",
@@ -71,7 +69,7 @@ class TestExample(unittest.TestCase):
         self.assertAlmostEqual(v1sum, v3sum)
 
     def test_intensive(self):
-        v1 = IntensiveScalar(name="v1", value=10)
+        v1 = IntensiveScalar(10)
         v2 = v1.transform(self.day_hour)
         self.assertEqual(set([10]), set(v2.to_dict().values()))
 
@@ -88,7 +86,6 @@ class TestExample(unittest.TestCase):
     def test_weights(self):
         # this should work
         Weight(
-            "w",
             data={"01": 0.8, "02": 0.2, "03": 0.5, "05": 0.5},
             dimension_level=self.day_hour,
         )
@@ -96,7 +93,6 @@ class TestExample(unittest.TestCase):
         # these should fail
         res = partial(
             Weight,
-            name="w",
             data={"01": 1, "03": 1, "05": 1},
             dimension_level=self.day_hour,
         )
@@ -104,7 +100,6 @@ class TestExample(unittest.TestCase):
 
     def test_transform_steps(self):
         v1 = Variable(
-            name="v1",
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,
@@ -148,7 +143,6 @@ class TestExample(unittest.TestCase):
 
     def test_to_series(self):
         v1 = Variable(
-            name="v1",
             data={1: 10},
             domain=self.year_hour,
             vartype="extensive",
@@ -161,7 +155,6 @@ class TestExample(unittest.TestCase):
 
     def test_draw_get_image_bytes(self):
         v1 = Variable(
-            name="v1",
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,

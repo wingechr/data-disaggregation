@@ -355,7 +355,6 @@ class Variable:
     and/or multidimensional numpy.ndarray
 
     Args:
-        name(str): name of variable
         data: data can be passed in different ways:
 
           * dictionary of key -> value,
@@ -379,14 +378,13 @@ class Variable:
 
     """
 
-    def __init__(self, name, data, domain, vartype, unit=None):
+    def __init__(self, data, domain, vartype, unit=None):
         self._unit = unit
 
         if vartype not in ("intensive", "extensive", "weight"):
             raise ValueError("vartype not in ('intensive', 'extensive', 'weight')")
 
         self._vartype = vartype
-        self._name = name or "UnnamedVariable"
 
         # set domain
         if not domain:  # Scalar
@@ -430,9 +428,6 @@ class Variable:
             if not np.allclose(np.ones(shape), sums):
                 raise ValueError("Values in some groups don't add up to 1.0")
 
-    def __str__(self):
-        return str(self.name)
-
     def to_series(self):
         """Return indexed pandas Series"""
         if not pd:
@@ -451,7 +446,7 @@ class Variable:
                 self._domain._keys, names=self._domain.dimension_level_names
             )
 
-        return pd.Series(data, index=index, name=self.name)
+        return pd.Series(data, index=index)
 
     def to_dict(self, skip_0=False):
         """Return data as an dict
@@ -482,12 +477,9 @@ class Variable:
 
         return res
 
-    def to_weight(self, name=None):
+    def to_weight(self):
         """Convert variable into weight.
         Only possible if Domain has only one dimension.
-
-        Args:
-            name(str, optional): new name
         """
 
         if self._domain.size != 1:
@@ -511,21 +503,19 @@ class Variable:
 
         # is_intensive=None ==> weights
         return Variable(
-            name=name or self.name,
             domain=self._domain,
             data=data,
             unit=None,
             vartype="weight",
         )
 
-    def aggregate(self, dimension_name, weights=None, name=None):
+    def aggregate(self, dimension_name, weights=None):
         """aggregate one dimension lvel to the next
 
         Args:
             dimension_name(str): name of dimension to be aggregated
             weights(Weights, optional): weights variable for aggregation,
               must have the the target dimension level as domain
-            name(str, optional): new name
         """
 
         # get the current level of the dimension
@@ -582,16 +572,13 @@ class Variable:
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            name=name or self.name,
             domain=new_domain,
             data=data_matrix,
             unit=self._unit,
             vartype=self._vartype,
         )
 
-    def disaggregate(
-        self, dimension_name, dimension_level_name, weights=None, name=None
-    ):
+    def disaggregate(self, dimension_name, dimension_level_name, weights=None):
         """disaggregate one dimension to one of the next child levels
 
         Args:
@@ -599,7 +586,6 @@ class Variable:
             dimension_level_name(str): name of new child level
             weights(Weights, optional): weights variable for disaggregation,
               must have the the target dimension level as domain
-            name(str, optional): new name
         """
 
         if self.is_extensive and not weights:
@@ -668,19 +654,17 @@ class Variable:
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
-            name=name or self.name,
             domain=new_domain,
             data=data_matrix,
             unit=self._unit,
             vartype=self._vartype,
         )
 
-    def expand(self, dimension, name=None):
+    def expand(self, dimension):
         """add dimension on aggregated level
 
         Args:
             dimension(Dimension): root level dimension
-            name(str, optional): new name
         """
 
         if not dimension.is_dimension_root:
@@ -694,19 +678,17 @@ class Variable:
         data_matrix = np.expand_dims(self._data_matrix, axis=self._domain.size)
         domain = Domain(list(self._domain.dimension_levels) + [dimension])
         return Variable(
-            name=name or self.name,
             domain=domain,
             data=data_matrix,
             unit=self._unit,
             vartype=self._vartype,
         )
 
-    def squeeze(self, dimension_name, name=None):
+    def squeeze(self, dimension_name):
         """remove aggregated dimension
 
         Args:
             dimension_name: names of existing dimensions to be dropped
-            name(str, optional): new name
         """
 
         logging.debug("removing %s" % (dimension_name,))
@@ -724,20 +706,18 @@ class Variable:
             + self._domain.dimension_levels[dim_idx + 1 :]
         )
         return Variable(
-            name=name or self.name,
             domain=domain,
             data=data_matrix,
             unit=self._unit,
             vartype=self._vartype,
         )
 
-    def reorder(self, dimension_names, name=None):
+    def reorder(self, dimension_names):
         """Return new Variable with reordered Dimensions
 
         Args:
             dimension_names(list): list of names of existing dimensions
               in desired order
-            name(str, optional): new name
         """
         if set(dimension_names) != set(self._domain.dimension_names):
             raise DimensionStructureError(
@@ -748,7 +728,6 @@ class Variable:
         data_matrix = self._data_matrix.transpose(indices)
         domain = Domain([self._domain.dimension_levels[i] for i in indices])
         return Variable(
-            name=name or self.name,
             domain=domain,
             data=data_matrix,
             unit=self._unit,
@@ -851,7 +830,7 @@ class Variable:
 
         return result
 
-    def transform(self, domain, level_weights=None, name=None):
+    def transform(self, domain, level_weights=None):
         """Main function to map variable to a new domain.
 
         Args:
@@ -859,8 +838,6 @@ class Variable:
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
-            name(str, optional): new name
-
         """
 
         if not isinstance(domain, Domain):
@@ -889,12 +866,8 @@ class Variable:
                 else:
                     raise NotImplementedError(action)
 
-        result = result.reorder(domain.dimension_names, name=name)
+        result = result.reorder(domain.dimension_names)
         return result
-
-    @property
-    def name(self):
-        return self._name
 
     @property
     def is_intensive(self):
@@ -917,7 +890,6 @@ class ExtensiveVariable(Variable):
     """Shorthand for `Variable(vartype="extensive")`
 
     Args:
-        name(str): name of variable
         data: data can be passed in different ways:
 
           * dictionary of key -> value, where key is a tuple that is an element
@@ -932,17 +904,14 @@ class ExtensiveVariable(Variable):
 
     """
 
-    def __init__(self, name, data, domain, unit=None):
-        super().__init__(
-            name=name, data=data, unit=unit, domain=domain, vartype="extensive"
-        )
+    def __init__(self, data, domain, unit=None):
+        super().__init__(data=data, unit=unit, domain=domain, vartype="extensive")
 
 
 class IntensiveVariable(Variable):
     """Shorthand for `Variable(vartype="intensive")`
 
     Args:
-        name(str): name of variable
         data: data can be passed in different ways:
 
           * dictionary of key -> value,
@@ -957,10 +926,8 @@ class IntensiveVariable(Variable):
 
     """
 
-    def __init__(self, name, data, domain, unit=None):
-        super().__init__(
-            name=name, data=data, unit=unit, domain=domain, vartype="intensive"
-        )
+    def __init__(self, data, domain, unit=None):
+        super().__init__(data=data, unit=unit, domain=domain, vartype="intensive")
 
 
 class Weight(Variable):
@@ -972,7 +939,6 @@ class Weight(Variable):
     * values in each group add up to 1.0
 
     Args:
-        name(str): name of variable
         data: data can be passed in different ways:
 
           * dictionary of key -> value,
@@ -986,9 +952,9 @@ class Weight(Variable):
 
     """
 
-    def __init__(self, name, data, dimension_level):
+    def __init__(self, data, dimension_level):
         super().__init__(
-            name=name, data=data, unit=None, domain=[dimension_level], vartype="weight"
+            data=data, unit=None, domain=[dimension_level], vartype="weight"
         )
 
 
@@ -996,28 +962,26 @@ class ExtensiveScalar(ExtensiveVariable):
     """Shorthand for `ExtensiveVariable(domain=None)`
 
     Args:
-        name(str): name of variable
         value: number
         unit(optional): not implemented yet
 
     """
 
-    def __init__(self, name, value, unit=None):
-        super().__init__(name=name, data=value, unit=unit, domain=[])
+    def __init__(self, value, unit=None):
+        super().__init__(data=value, unit=unit, domain=[])
 
 
 class IntensiveScalar(IntensiveVariable):
     """Shorthand for `IntensiveVariable(domain=None)`
 
     Args:
-        name(str): name of variable
         value: number
         unit(optional): not implemented yet
 
     """
 
-    def __init__(self, name, value, unit=None):
-        super().__init__(name=name, data=value, unit=unit, domain=[])
+    def __init__(self, value, unit=None):
+        super().__init__(data=value, unit=unit, domain=[])
 
 
 if __name__ == "__main__":

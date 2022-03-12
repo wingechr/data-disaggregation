@@ -5,7 +5,13 @@ from functools import partial
 import numpy as np
 from numpy.testing import assert_array_equal
 
-from data_disaggregation.classes import Dimension, IntensiveScalar, Variable, Weight
+from data_disaggregation.classes import (
+    Dimension,
+    ExtensiveVariable,
+    IntensiveScalar,
+    Variable,
+    Weight,
+)
 from data_disaggregation.draw import draw_transform
 from data_disaggregation.exceptions import AggregationError, ProgramNotFoundError
 
@@ -170,3 +176,90 @@ class TestExample(unittest.TestCase):
         except ProgramNotFoundError:
             return  # dot not in PATH
         self.assertTrue(image_bytes.decode().startswith("<?xml"))
+
+    def test_math(self):
+        domain1 = [self.year_hour, self.region]
+        v1 = ExtensiveVariable(
+            {
+                (1, "r1"): 1,
+                (1, "r2"): 2,
+            },
+            domain1,
+        )
+        v2 = ExtensiveVariable(
+            {
+                (1, "r1"): 3,
+                (2, "r2"): 4,
+            },
+            domain1,
+        )
+
+        # test add
+        v_add = v1 + v2
+        self.assertDictEqual(
+            v_add.to_dict(skip_0=True),
+            {
+                (1, "r1"): 4,
+                (1, "r2"): 2,
+                (2, "r2"): 4,
+            },
+        )
+
+        # test subtract
+        v_sub = v1 - v2
+        self.assertDictEqual(
+            v_sub.to_dict(skip_0=True),
+            {
+                (1, "r1"): -2,
+                (1, "r2"): 2,
+                (2, "r2"): -4,
+            },
+        )
+
+        # test mult
+        v_mult = v1 * v2
+        self.assertDictEqual(v_mult.to_dict(skip_0=True), {(1, "r1"): 3})
+
+        # test truediv
+        # NOTE: division by 0 creates na, so we use fillna
+        v_div = v_mult / v2
+        self.assertDictEqual(v_div.fillna().to_dict(skip_0=True), {(1, "r1"): 1})
+
+        # test neg
+        v_neg = -v_mult
+        self.assertDictEqual(v_neg.to_dict(skip_0=True), {(1, "r1"): -3})
+
+        # ----------------------------------------------
+        # test scalar
+        # ----------------------------------------------
+
+        v_add = v1 + 1
+        self.assertDictEqual(
+            v_add.to_dict(skip_0=True),
+            {
+                (1, "r1"): 2,
+                (1, "r2"): 3,
+                (2, "r1"): 1,
+                (2, "r2"): 1,
+                (3, "r1"): 1,
+                (3, "r2"): 1,
+                (4, "r1"): 1,
+                (4, "r2"): 1,
+                (5, "r1"): 1,
+                (5, "r2"): 1,
+            },
+        )
+
+        # rmul
+
+        v_rmul = 2 * v1
+        self.assertDictEqual(v_rmul.to_dict(skip_0=True), {(1, "r1"): 2, (1, "r2"): 4})
+
+        # rdiv
+        # NOTE: will create inf for x/0
+
+        rdiv = 12 / (v1 + 1) - 12
+        self.assertDictEqual(
+            rdiv.to_dict(skip_0=True),
+            {(1, "r1"): -6, (1, "r2"): -8},  # 12 / (1 + 1) - 12  # 12 / (2 + 1) - 12
+        )

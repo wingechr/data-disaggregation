@@ -8,7 +8,12 @@ from itertools import product
 
 import numpy as np
 
-from .exceptions import AggregationError, DimensionStructureError, DuplicateNameError
+from .exceptions import (
+    AggregationError,
+    ArithmeticError,
+    DimensionStructureError,
+    DuplicateNameError,
+)
 from .functions import create_group_matrix, get_path_up_down, group_unique_values
 
 # pandas is no a required dependency
@@ -259,6 +264,11 @@ class Domain:
         dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
         return "(" + dims_str + ")"
 
+    def __eq__(self, other):
+        return self._size == other._size and all(
+            d1 == d2 for d1, d2 in zip(self.dimension_levels, other.dimension_levels)
+        )
+
     def dict_to_matrix(self, data):
         """create data matrix from dict data
 
@@ -347,8 +357,152 @@ class Domain:
     def shape(self):
         return self._shape
 
+    @property
+    def is_scalar(self):
+        return self.size == 0
 
-class Variable:
+
+class VariableBase:
+    pass
+
+
+class MixinNumpyMath:
+    """delegate math operations to numpy"""
+
+    def _get_unit_add(self, other):
+        unit = self._unit
+        if isinstance(other, VariableBase):
+            other_unit = other._unit
+        else:
+            other_unit = unit
+        if unit != other_unit:
+            raise ArithmeticError("unit mismatch")
+        return unit
+
+    def _get_unit_mult(self, other):
+        unit = self._unit
+        if isinstance(other, VariableBase):
+            other_unit = other._unit
+        else:
+            other_unit = unit
+        if unit or other_unit:
+            raise NotImplementedError("unit multiplication")
+        return unit
+
+    def _get_unit_div(self, other):
+        unit = self._unit
+        if isinstance(other, VariableBase):
+            other_unit = other._unit
+        else:
+            other_unit = unit
+        if unit or other_unit:
+            raise NotImplementedError("unit division")
+        return unit
+
+    def _get_unit_rdiv(self, other):
+        unit = self._unit
+        if isinstance(other, VariableBase):
+            other_unit = other._unit
+        else:
+            other_unit = unit
+        if unit or other_unit:
+            raise NotImplementedError("unit division")
+        return unit
+
+    def _get_vartype(self, other):
+        vartype = self._vartype
+        if isinstance(other, VariableBase):
+            other_vartype = other._vartype
+        else:
+            other_vartype = vartype
+        if vartype != other_vartype:
+            raise ArithmeticError("vartype mismatch")
+        if vartype != "extensive":
+            raise ArithmeticError("invalid vartype for operation: %s" % vartype)
+        return vartype
+
+    def _get_domain(self, other):
+        # domain must be either equal, or one must be a scalar
+        domain = self._domain
+        if isinstance(other, VariableBase):
+            other_domain = other._domain
+        else:
+            other_domain = domain
+        if domain.is_scalar:
+            return other_domain
+        elif other_domain.is_scalar:
+            return domain
+        if domain != other_domain:
+            raise ArithmeticError("vartype mismatch")
+        return domain
+
+    @staticmethod
+    def _get_data_matrix_other(other):
+        if isinstance(other, VariableBase):
+            data_matrix = other._data_matrix
+        else:
+            data_matrix = other
+        return data_matrix
+
+    def __add__(self, other):
+        unit = self._get_unit_add(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._data_matrix + self._get_data_matrix_other(other)
+        return Variable(data, domain, vartype, unit=unit)
+
+    def __sub__(self, other):
+        unit = self._get_unit_add(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._data_matrix - self._get_data_matrix_other(other)
+        return Variable(data, domain, vartype, unit=unit)
+
+    def __mul__(self, other):
+        unit = self._get_unit_mult(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._data_matrix * self._get_data_matrix_other(other)
+        return Variable(data, domain, vartype, unit=unit)
+
+    def __rmul__(self, other):
+        unit = self._get_unit_mult(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._get_data_matrix_other(other) * self._data_matrix
+        return Variable(data, domain, vartype, unit=unit)
+
+    def __truediv__(self, other):
+        unit = self._get_unit_rdiv(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._data_matrix / self._get_data_matrix_other(other)
+        return Variable(data, domain, vartype, unit=unit)
+
+    def __rtruediv__(self, other):
+        unit = self._get_unit_rdiv(other)
+        vartype = self._get_vartype(other)
+        domain = self._get_domain(other)
+        # use numpy to do actual calculation
+        data = self._get_data_matrix_other(other) / self._data_matrix
+        return Variable(data, domain, vartype, unit=unit)
+
+    # unary methods
+    def __neg__(self):
+        data = -self._data_matrix
+        return Variable(data, self._domain, self._vartype, unit=self._unit)
+
+    def fillna(self, value=0):
+        data = np.nan_to_num(self._data_matrix, nan=value)
+        return Variable(data, self._domain, self._vartype, unit=self._unit)
+
+
+class Variable(VariableBase, MixinNumpyMath):
     """Data container over a multidimensional domain.
 
     Comparable to pandas.Series with multiindex
@@ -883,7 +1037,7 @@ class Variable:
 
     @property
     def is_scalar(self):
-        return self._domain.size == 0
+        return self._domain.is_scalar
 
 
 class ExtensiveVariable(Variable):

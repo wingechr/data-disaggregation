@@ -24,3 +24,7 @@ class DimensionStructureError(BaseException):
 
 class ProgramNotFoundError(BaseException):
     pass
+
+
+class ArithmeticError(BaseException):
+    pass

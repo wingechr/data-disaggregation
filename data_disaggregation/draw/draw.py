@@ -2,6 +2,46 @@ import subprocess as sp
 
 from ..exceptions import ProgramNotFoundError
 
+ATTRIBUTES = {
+    "graph": {"rankdir": "TD", "bgcolor": "transparent", "nodesep": 1, "ranksep": 1},
+    "node": {
+        "shape": "circle",
+        "label": "",
+        "width": 0.2,
+        "height": 0.2,
+        "fontsize": 12,
+    },
+    "edge": {
+        "dir": "both",
+        "arrowhead": "none",
+        "arrowtail": "none",
+        "arrowsize": 0.2,
+        "fontsize": 8,
+    },
+}
+
+STYLES = {
+    "root": {
+        "shape": "circle",
+        "color": "#a0a0a0",
+        "style": "filled",
+        "width": 0.05,
+        "height": 0.05,
+    },
+    "node": {"color": "#a0a0a0"},
+    "node_start": {"fillcolor": "#a0f0a0", "style": "filled"},
+    "node_end": {"fillcolor": "#a0a0f0", "style": "filled"},
+    "node_keep": {"fillcolor": "#a0f0a0", "style": "filled"},
+    "nodes_path": {"fillcolor": "#a0a0a0", "style": "filled"},
+    "node_squeeze": {"fillcolor": "#f0a0a0", "shape": "house", "style": "filled"},
+    "node_expand": {"fillcolor": "#a0f0a0", "shape": "invhouse", "style": "filled"},
+    "node_dim": {"shape": "box"},
+    "edge": {"color": "#a0a0a0"},
+    "edge_root": {"style": "dotted", "color": "#a0a0a0"},
+    "edge_down": {"arrowhead": "normal", "style": "bold"},
+    "edge_up": {"arrowtail": "normal", "style": "bold"},
+}
+
 
 def get_dot_cmd(filetype="png", dpi=300):
     """Return command for subprocess"""
@@ -161,40 +201,11 @@ def get_components(dim_steps):
 
     dot_components = [
         # global config
-        (
-            "graph",
-            {"rankdir": "TD", "bgcolor": "transparent", "nodesep": 1, "ranksep": 1},
-        ),
-        (
-            "node",
-            {
-                "shape": "circle",
-                "label": "",
-                "width": 0.2,
-                "height": 0.2,
-                "fontsize": 12,
-            },
-        ),
-        (
-            "edge",
-            {
-                "dir": "both",
-                "arrowhead": "none",
-                "arrowtail": "none",
-                "arrowsize": 0.2,
-                "fontsize": 8,
-            },
-        ),
-        (  # root node
-            get_node_id(None),
-            {
-                "shape": "circle",
-                "color": "#a0a0a0",
-                "style": "filled",
-                "width": 0.05,
-                "height": 0.05,
-            },
-        ),
+        ("graph", ATTRIBUTES["graph"]),
+        ("node", ATTRIBUTES["node"]),
+        ("edge", ATTRIBUTES["edge"]),
+        # root node
+        (get_node_id(None), STYLES["root"]),
     ]
 
     # iterate over dimensions and create subgraphs
@@ -231,35 +242,31 @@ def get_components(dim_steps):
 
 
 def get_node_attrs(node, parent, transform_path):
-    node_attr = {"color": "#a0a0a0", "xlabel": node.name}
+    node_attr = STYLES["node"].copy()
+    node_attr.update({"xlabel": node.name})
     if node == transform_path["node_start"]:
-        node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
+        node_attr.update(STYLES["node_start"])
     elif node == transform_path["node_end"]:
-        node_attr.update({"fillcolor": "#a0a0f0", "style": "filled"})
+        node_attr.update(STYLES["node_end"])
     elif node == transform_path["node_keep"]:
-        node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
+        node_attr.update(STYLES["node_keep"])
     elif node in transform_path["nodes_path"]:
-        node_attr.update({"fillcolor": "#a0a0a0", "style": "filled"})
+        node_attr.update(STYLES["nodes_path"])
     if not parent:
         if transform_path["squeeze"]:
-            node_attr.update(
-                {"fillcolor": "#f0a0a0", "style": "filled", "shape": "house"}
-            )
+            node_attr.update(STYLES["node_squeeze"])
         elif transform_path["expand"]:
-            node_attr.update(
-                {"fillcolor": "#a0f0a0", "style": "filled", "shape": "invhouse"}
-            )
+            node_attr.update(STYLES["node_expand"])
         else:
-            node_attr.update({"shape": "box"})
-
+            node_attr.update(STYLES["node_dim"])
     return node_attr
 
 
 def get_edge_attrs(node, parent, transform_path):
-    edge_attr = {"color": "#a0a0a0"}
+    edge_attr = STYLES["edge"].copy()
     if not parent:  # edge from root node
         edge_key_down = (None, node)
-        edge_attr.update({"style": "dotted", "color": "#a0a0a0"})
+        edge_attr.update(STYLES["edge_root"])
     else:
         edge_key_down = (parent, node)
     edge_key_up = tuple(reversed(edge_key_down))
@@ -267,12 +274,12 @@ def get_edge_attrs(node, parent, transform_path):
         edge_key_down in transform_path["edges_down"]
         or edge_key_up in transform_path["edges_down"]
     ):
-        edge_attr.update({"arrowhead": "normal", "style": "bold"})
+        edge_attr.update(STYLES["edge_down"])
     elif (
         edge_key_down in transform_path["edges_up"]
         or edge_key_up in transform_path["edges_up"]
     ):
-        edge_attr.update({"arrowtail": "normal", "style": "bold"})
+        edge_attr.update(STYLES["edge_up"])
     weight = transform_path["edges_weight"].get(edge_key_down) or transform_path[
         "edges_weight"
     ].get(edge_key_up)

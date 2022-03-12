@@ -173,7 +173,7 @@ class TestExample(unittest.TestCase):
         )
         steps = v1.get_transform_steps(domain=[self.region])
         try:
-            image_bytes = draw_transform(steps)
+            image_bytes = draw_transform(steps, filetype="svg")
         except ProgramNotFoundError:
             return  # dot not in PATH
-        self.assertEqual(type(image_bytes), bytes)
+        self.assertTrue(image_bytes.decode().startswith("<?xml"))

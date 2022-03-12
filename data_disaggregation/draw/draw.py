@@ -1,17 +1,15 @@
-import logging
 import subprocess as sp
-from tempfile import NamedTemporaryFile
 
 from ..exceptions import ProgramNotFoundError
 
 
-def get_dot_cmd(filetype="png", dpi=300, **kwargs):
-    # use neato -n for pre-calculated positions
+def get_dot_cmd(filetype="png", dpi=300):
+    """Return command for subprocess"""
     return ["dot", "-T%s" % filetype, "-Gdpi=%d" % dpi]
 
 
 def get_image_bytes(dot_cmd, dot_str):
-    logging.debug(" ".join(dot_cmd))
+    """return image as bytes from running dot in subprocess"""
     try:
         proc = sp.Popen(dot_cmd, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
     except FileNotFoundError:
@@ -23,15 +21,8 @@ def get_image_bytes(dot_cmd, dot_str):
     return out_img
 
 
-def notebook_display_image_bytes(image_bytes, filetype="png"):
-    from IPython import display
-
-    with NamedTemporaryFile(suffix="." + filetype, delete=False, mode="wb") as file:
-        file.write(image_bytes)
-    return display.Image(file.name)
-
-
 def get_val_str(val):
+    """create value string for dot"""
     if val is None:
         return "none"
     if isinstance(val, (list, tuple)):
@@ -40,21 +31,24 @@ def get_val_str(val):
 
 
 def get_attribute_str(attributes):
+    """create attribute string for dot"""
     return ",".join('%s="%s"' % (k, get_val_str(v)) for k, v in attributes.items())
 
 
 def get_node_str(node_id, attributes):
+    """create node string for dot"""
     return "%s[%s];" % (node_id, get_attribute_str(attributes))
 
 
 def get_edge_str(node_ids, attributes):
+    """create edge string for dot"""
     return "%s -> %s [%s];" % (node_ids[0], node_ids[1], get_attribute_str(attributes))
 
 
-def get_dot_str(components):
+def get_dot_digraph_str(dot_components):
+    """create dot string from parts"""
     components_str = []
-
-    for comp in components:
+    for comp in dot_components:
         if isinstance(comp, str):
             cmp_str = comp
         else:
@@ -69,21 +63,108 @@ def get_dot_str(components):
 
 
 def draw_domain(variable, filetype="png", dpi=150):
+    """create image from variable transormation steps
+    Args:
+        variable: Variable object
+        filetype(str): "png" or "svg"
+        dpi(int): resolution for png image
+    """
     steps = variable.get_transform_steps(variable._domain)
     return draw_transform(steps, filetype=filetype, dpi=dpi)
 
 
 def draw_transform(dim_steps, filetype="png", dpi=150):
-    """
+    """create image from variable transormation steps
     Args:
         dim_steps(OrderedDict): dimension -> steps
           * each element contains steps for a dimension
           * dimensions are all dimensions in source and target domain
           * each step is (from_level, to_level, action, (weight_level, weight_var))
+        filetype(str): "png" or "svg"
+        dpi(int): resolution for png image
     """
-    components = [
+    dot_cmd = get_dot_cmd(filetype=filetype, dpi=dpi)
+    dot_components = get_components(dim_steps)
+    dot_str = get_dot_digraph_str(dot_components)
+    image_bytes = get_image_bytes(dot_cmd, dot_str)
+
+    return image_bytes
+
+
+def get_transform_path(steps):
+    # identify parts of subgraph that are part
+    # of the transformation path
+
+    transform_path = {
+        "edges_up": set(),
+        "edges_down": set(),
+        "squeeze": False,
+        "expand": False,
+        "node_start": None,
+        "node_end": None,
+        "node_keep": None,
+        "nodes_path": set(),
+        "edges_weight": {},
+    }
+
+    for from_level, to_level, action, weight in steps:
+        if action != "keep":
+            if from_level:
+                transform_path["nodes_path"].add(from_level)
+                if not transform_path["node_start"]:
+                    transform_path["node_start"] = from_level
+            if to_level:
+                transform_path["nodes_path"].add(to_level)
+                transform_path["node_end"] = to_level
+        if action == "aggregate":
+            transform_path["edges_up"].add((from_level, to_level))
+        elif action == "disaggregate":
+            transform_path["edges_down"].add((from_level, to_level))
+        elif action == "squeeze":
+            transform_path["squeeze"] = True
+        elif action == "expand":
+            transform_path["expand"] = True
+        elif action == "keep":
+            # from_level == to_level
+            transform_path["node_keep"] = from_level
+        else:
+            raise NotImplementedError(action)
+
+        if weight:
+            key = (from_level, to_level)
+            transform_path["edges_weight"][key] = weight
+
+    if transform_path["node_start"]:
+        transform_path["nodes_path"].remove(transform_path["node_start"])
+
+    if transform_path["node_end"]:
+        transform_path["nodes_path"].remove(transform_path["node_end"])
+
+    return transform_path
+
+
+def iter_tree(node, parent=None):
+    yield (node, parent)
+    for child in node.children.values():
+        yield from iter_tree(child, parent=node)
+
+
+def get_components(dim_steps):
+
+    # create node ids for for dot
+    node_ids = {}
+
+    def get_node_id(*args):
+        if args not in node_ids:
+            node_ids[args] = "N%d" % len(node_ids)
+        return node_ids[args]
+
+    dot_components = [
         # global config
-        ("graph", {"rankdir": "TD", "nodesep": 1, "ranksep": 1}),
+        (
+            "graph",
+            {"rankdir": "TD", "bgcolor": "transparent", "nodesep": 1, "ranksep": 1},
+        ),
         (
             "node",
             {
@@ -104,18 +185,8 @@ def draw_transform(dim_steps, filetype="png", dpi=150):
                 "fontsize": 8,
             },
         ),
-    ]
-
-    node_ids = {}
-
-    def get_id(*args):
-        if args not in node_ids:
-            node_ids[args] = "N%d" % len(node_ids)
-        return node_ids[args]
-
-    components.append(
-        (
-            get_id(None),
+        (  # root node
+            get_node_id(None),
             {
                 "shape": "circle",
                 "color": "#a0a0a0",
@@ -123,136 +194,88 @@ def draw_transform(dim_steps, filetype="png", dpi=150):
                 "width": 0.05,
                 "height": 0.05,
             },
-        )
-    )  # root node
+        ),
+    ]
 
-    def add_rec(dim_lev, transf, components, parent=None):
-        nid = get_id(dim_lev)
-        pid = get_id(parent)
-        ids_down = (pid, nid)
-
-        edge_attr = {"color": "#a0a0a0"}
-        node_attr = {"color": "#a0a0a0", "xlabel": dim_lev.name}
-
-        if dim_lev == transf["node_start"]:
-            node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
-        elif dim_lev == transf["node_end"]:
-            node_attr.update({"fillcolor": "#a0a0f0", "style": "filled"})
-        elif dim_lev == transf["node_keep"]:
-            node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
-        elif dim_lev in transf["nodes_path"]:
-            node_attr.update({"fillcolor": "#a0a0a0", "style": "filled"})
-
-        else:
-            pass
-
-        if not parent:  # dim level
-            edge_key_down = (None, dim_lev)
-            if transf["squeeze"]:
-                node_attr.update(
-                    {"fillcolor": "#f0a0a0", "style": "filled", "shape": "house"}
-                )
-            elif transf["expand"]:
-                node_attr.update(
-                    {"fillcolor": "#a0f0a0", "style": "filled", "shape": "invhouse"}
-                )
-            else:
-                node_attr.update({"shape": "box"})
-
-        else:
-            edge_key_down = (parent, dim_lev)
-
-        edge_key_up = tuple(reversed(edge_key_down))
-
-        if edge_key_down in transf["edges_down"] or edge_key_up in transf["edges_down"]:
-            edge_attr.update({"arrowhead": "normal", "style": "bold"})
-        elif edge_key_down in transf["edges_up"] or edge_key_up in transf["edges_up"]:
-            edge_attr.update({"arrowtail": "normal", "style": "bold"})
-
-        weight = transf["edges_weight"].get(edge_key_down) or transf[
-            "edges_weight"
-        ].get(edge_key_up)
-        if weight:
-            edge_attr.update({"xlabel": weight})
-
-        components.append((nid, node_attr))
-        if parent:
-            # add root edges later (outside of cluster)
-            components.append((ids_down, edge_attr))
-
-        # recursion
-        for child in dim_lev.children.values():
-            add_rec(child, transf, components, parent=dim_lev)
-
+    # iterate over dimensions and create subgraphs
     for dim_idx, (dim, steps) in enumerate(dim_steps.items()):
+        transform_path = get_transform_path(steps)
 
-        transf = {
-            "edges_up": set(),
-            "edges_down": set(),
-            "squeeze": False,
-            "expand": False,
-            "node_start": None,
-            "node_end": None,
-            "node_keep": None,
-            "nodes_path": set(),
-            "edges_weight": {},
-        }
+        # start cluster for dimension
+        dot_components.append("subgraph cluster_%d {" % dim_idx)
+        dot_components.append("peripheries=0;")  # no border around cluster
 
-        for from_level, to_level, action, weight in steps:
-            if action != "keep":
-                if from_level:
-                    transf["nodes_path"].add(from_level)
-                    if not transf["node_start"]:
-                        transf["node_start"] = from_level
-                if to_level:
-                    transf["nodes_path"].add(to_level)
-                    transf["node_end"] = to_level
+        # generate all nodes for this dimension
+        for node, parent in iter_tree(dim):
+            nid = get_node_id(node)
+            # add node
+            node_attrs = get_node_attrs(node, parent, transform_path)
+            dot_components.append((nid, node_attrs))
 
-            if action == "aggregate":
-                transf["edges_up"].add((from_level, to_level))
-            elif action == "disaggregate":
-                transf["edges_down"].add((from_level, to_level))
-            elif action == "squeeze":
-                transf["squeeze"] = True
-            elif action == "expand":
-                transf["expand"] = True
-            elif action == "keep":
-                # from_level == to_level
-                transf["node_keep"] = from_level
-            else:
-                raise NotImplementedError(action)
+        # close cluster for dimension
+        dot_components.append("}")
 
-            if weight:
-                key = (from_level, to_level)
-                transf["edges_weight"][key] = weight
+        # generate all nodes for this dimension
+        for node, parent in iter_tree(dim):
+            nid = get_node_id(node)
+            edge_down_id = (get_node_id(parent), nid)
+            edge_attrs = get_edge_attrs(node, parent, transform_path)
+            dot_components.append(
+                (
+                    edge_down_id,
+                    edge_attrs,
+                )
+            )
 
-        if transf["node_start"]:
-            transf["nodes_path"].remove(transf["node_start"])
+    return dot_components
 
-        if transf["node_end"]:
-            transf["nodes_path"].remove(transf["node_end"])
 
-        dim_components = []
-        add_rec(dim, transf, dim_components)
+def get_node_attrs(node, parent, transform_path):
+    node_attr = {"color": "#a0a0a0", "xlabel": node.name}
+    if node == transform_path["node_start"]:
+        node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
+    elif node == transform_path["node_end"]:
+        node_attr.update({"fillcolor": "#a0a0f0", "style": "filled"})
+    elif node == transform_path["node_keep"]:
+        node_attr.update({"fillcolor": "#a0f0a0", "style": "filled"})
+    elif node in transform_path["nodes_path"]:
+        node_attr.update({"fillcolor": "#a0a0a0", "style": "filled"})
+    if not parent:
+        if transform_path["squeeze"]:
+            node_attr.update(
+                {"fillcolor": "#f0a0a0", "style": "filled", "shape": "house"}
+            )
+        elif transform_path["expand"]:
+            node_attr.update(
+                {"fillcolor": "#a0f0a0", "style": "filled", "shape": "invhouse"}
+            )
+        else:
+            node_attr.update({"shape": "box"})
 
-        components.append("subgraph cluster_%d {" % dim_idx)
-        # cluster styles
-        components.append("peripheries=0;")  # no border around cluster
-        components += dim_components
-        components.append("}")
+    return node_attr
 
-    for dim in dim_steps.keys():
-        # root edge
-        edge_attr = {
-            "style": "dotted",
-            "color": "#a0a0a0",
-        }  # invisible edge from root node
-        nid = get_id(dim)
-        pid = get_id(None)
-        ids_down = (pid, nid)
-        components.append((ids_down, edge_attr))
 
-    dot_cmd = get_dot_cmd(filetype=filetype, dpi=dpi)
-    dot_str = get_dot_str(components)
-    image_bytes = get_image_bytes(dot_cmd, dot_str)
-    return image_bytes
+def get_edge_attrs(node, parent, transform_path):
+    edge_attr = {"color": "#a0a0a0"}
+    if not parent:  # edge from root node
+        edge_key_down = (None, node)
+        edge_attr.update({"style": "dotted", "color": "#a0a0a0"})
+    else:
+        edge_key_down = (parent, node)
+    edge_key_up = tuple(reversed(edge_key_down))
+    if (
+        edge_key_down in transform_path["edges_down"]
+        or edge_key_up in transform_path["edges_down"]
+    ):
+        edge_attr.update({"arrowhead": "normal", "style": "bold"})
+    elif (
+        edge_key_down in transform_path["edges_up"]
+        or edge_key_up in transform_path["edges_up"]
+    ):
+        edge_attr.update({"arrowtail": "normal", "style": "bold"})
+    weight = transform_path["edges_weight"].get(edge_key_down) or transform_path[
+        "edges_weight"
+    ].get(edge_key_up)
+    if weight:
+        edge_attr.update({"xlabel": weight})
+    return edge_attr

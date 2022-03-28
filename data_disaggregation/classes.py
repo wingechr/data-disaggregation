@@ -595,7 +595,7 @@ class Variable(VariableBase, MixinNumpyMath):
 
         if not self._domain.dimensions:
             index = None
-        elif self._domain.size() == 1:  # one dimensional index
+        elif self._domain.size == 1:  # one dimensional index
             dimension_level = self._domain.dimension_levels[0]
             index = pd.Index(dimension_level.elements, name=dimension_level.name)
         else:  # multilevel index

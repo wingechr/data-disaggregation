@@ -109,16 +109,16 @@ class DimensionLevel:
 
         parent_elements = parent.elements
         set_parent_elements = set(parent_elements)
-        for p in set_parent_elements:
-            if p not in grouped_elements:
-                raise DimensionStructureError("Missing elements for parent: %s for" % p)
+        set_grouped_elements = set(grouped_elements)
+        if set_parent_elements != set_grouped_elements:
+            raise DimensionStructureError("Parent set != element groups")
 
         elements = []
         group_sizes = []
         set_elements = set()
-        for p, elems in grouped_elements.items():
-            if p not in set_parent_elements:
-                raise DimensionStructureError("Parent does not exist: %s" % p)
+        # IMPORTANT: group order defined by parent!
+        for p in parent_elements:
+            elems = grouped_elements[p]
             group_size = len(elems)
             if not group_size:
                 raise DimensionStructureError("No elements for parent: %s" % p)

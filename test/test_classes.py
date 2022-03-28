@@ -66,3 +66,11 @@ class TestClasses(unittest.TestCase):
             tuple(dom._keys),
             (("d11", "d21"), ("d11", "d22"), ("d12", "d21"), ("d12", "d22")),
         )
+
+    def test_parse_grouped_elements(self):
+        d1 = Dimension(name="D1")
+        d1a = d1.add_level(name="D1a", grouped_elements=["d11", "d12"])
+        d1b = d1a.add_level(
+            name="D1b", grouped_elements={"d12": [3, 4, 5], "d11": [1, 2]}
+        )
+        self.assertEqual(d1b.elements, (1, 2, 3, 4, 5))

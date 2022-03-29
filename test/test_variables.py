@@ -1,4 +1,3 @@
-import logging
 import unittest
 from functools import partial
 
@@ -15,13 +14,8 @@ from data_disaggregation.classes import (
 from data_disaggregation.draw import draw_transform
 from data_disaggregation.exceptions import AggregationError, ProgramNotFoundError
 
-LOGGING_DATE_FMT = "%Y-%m-%d %H:%M:%S"
-LOGGING_FMT = "[%(asctime)s %(levelname)7s] %(message)s"
 
-logging.basicConfig(format=LOGGING_FMT, datefmt=LOGGING_DATE_FMT, level=logging.DEBUG)
-
-
-class TestExample(unittest.TestCase):
+class TestVariable(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.time = Dimension("time")

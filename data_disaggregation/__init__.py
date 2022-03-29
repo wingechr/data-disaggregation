@@ -12,7 +12,7 @@ __copyright__ = "MIT"
 __url__ = "https://github.com/wingechr/data-disaggregation"
 
 try:
-    from . import draw
+    from . import draw, exceptions
     from .classes import (
         Dimension,
         DimensionLevel,

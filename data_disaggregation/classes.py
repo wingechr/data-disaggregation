@@ -14,7 +14,12 @@ from .exceptions import (
     DimensionStructureError,
     DuplicateNameError,
 )
-from .functions import create_group_matrix, get_path_up_down, group_unique_values
+from .functions import (
+    create_group_matrix,
+    get_path_up_down,
+    group_unique_values,
+    normalize_groups,
+)
 
 # pandas is no a required dependency
 try:
@@ -634,29 +639,24 @@ class Variable(VariableBase, MixinNumpyMath):
 
         return res
 
-    def to_weight(self):
+    def to_weight(self, on_group_0="error"):
         """Convert variable into weight.
         Only possible if Domain has only one dimension.
+
+        Args:
+        on_group_0(str, optional): how to handle group sums of 0: must be one of
+            * 'error': the default, raises an Error
+            * 'zero': sets resulting weights to 0.
+               this can lead to a loss of values on disaggregation
+            * 'equal': sets resulting weights to 1/n
         """
 
         if self._domain.size != 1:
             raise DimensionStructureError("Weights must have exactly one dimension")
         dimension_level = self._domain.dimension_levels[0]
-
-        # create sum for groups. shapes: (m, n) * (n,) = (m,)
-        sums = dimension_level.group_matrix.transpose().dot(self._data_matrix)
-
-        if not np.all(sums != 0):
-            raise ValueError("some groups add up to 0")
-
-        # create inverse, repeat, sum: (m,) => (1, m) => (n, m)
-        # values = np.repeat(1 / sums, dimension_level.size, axis=1)
-        sums = np.reshape(1 / sums, (1, sums.size))
-        sums = np.repeat(sums, dimension_level.size, axis=0)
-
-        sums = np.sum(sums * dimension_level.group_matrix, axis=1)
-
-        data = sums * self._data_matrix
+        group_matrix = dimension_level.group_matrix
+        data_matrix = self._data_matrix
+        data = normalize_groups(group_matrix, data_matrix, on_group_0=on_group_0)
 
         # is_intensive=None ==> weights
         return Variable(
@@ -891,13 +891,18 @@ class Variable(VariableBase, MixinNumpyMath):
             vartype=self._vartype,
         )
 
-    def get_transform_steps(self, domain, level_weights=None):
+    def get_transform_steps(self, domain, level_weights=None, on_group_0="error"):
         """
         Args:
             domain: list of DimensionLevel instances (or Domain instance)
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
+            on_group_0(str, optional): how to handle group sums of 0: must be one of
+            * 'error': the default, raises an Error
+            * 'zero': sets resulting weights to 0.
+               this can lead to a loss of values on disaggregation
+            * 'equal': sets resulting weights to 1/n
         Returns:
             OrderedDict: dimension -> steps
               * each element contains steps for a dimension
@@ -915,7 +920,7 @@ class Variable(VariableBase, MixinNumpyMath):
                 return None
             try:
                 weights = weights.transform(Domain([dimension_level]))
-                weights = weights.to_weight()
+                weights = weights.to_weight(on_group_0=on_group_0)
             except AggregationError:
                 raise AggregationError("Cannot transform weight: %s" % weights)
             return weights
@@ -987,7 +992,7 @@ class Variable(VariableBase, MixinNumpyMath):
 
         return result
 
-    def transform(self, domain, level_weights=None):
+    def transform(self, domain, level_weights=None, on_group_0="error"):
         """Main function to map variable to a new domain.
 
         Args:
@@ -995,6 +1000,11 @@ class Variable(VariableBase, MixinNumpyMath):
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
+            on_group_0(str, optional): how to handle group sums of 0: must be one of
+                * 'error': the default, raises an Error
+                * 'zero': sets resulting weights to 0.
+                   WARNING: this can lead to a loss of values on disaggregation
+                * 'equal': sets resulting weights to 1/n
         """
 
         if not isinstance(domain, Domain):
@@ -1002,7 +1012,9 @@ class Variable(VariableBase, MixinNumpyMath):
         level_weights = level_weights or {}
 
         result = self
-        dim_steps = self.get_transform_steps(domain, level_weights=level_weights)
+        dim_steps = self.get_transform_steps(
+            domain, level_weights=level_weights, on_group_0=on_group_0
+        )
         for dim, steps in dim_steps.items():
             dim_name = dim.name
 

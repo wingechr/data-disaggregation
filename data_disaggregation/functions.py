@@ -6,6 +6,8 @@ from collections import OrderedDict
 
 import numpy as np
 
+from .exceptions import DimensionStructureError
+
 
 def create_group_matrix(group_sizes):
     """Create a grouping matrix.
@@ -131,3 +133,100 @@ def get_path_up_down(path_source, path_target):
     path_down = path_target[n:]
     path_up = list(reversed(path_source[n:]))
     return path_up, peak, path_down
+
+
+def normalize_groups(
+    group_matrix: np.array, data_matrix1_d: np.array, on_group_0: str = "error"
+) -> np.array:
+    """Normalize values in each group (sums should be 1)
+
+    Args:
+        group_matrix(np.array): (n, m) matrix
+            with n = number of elemens in this level
+            and m = number of elemens in parent level (usually smaller than n)
+        data_matrix1_d(np.array): only works for one-dimensional data,
+            so shape must be (n,)
+        on_group_0(str, optional): how to handle group sums of 0: must be one of
+            * 'error': the default, raises an Error
+            * 'zero': sets resulting weights to 0.
+               this can lead to a loss of values on disaggregation
+            * 'equal': sets resulting weights to 1/n
+
+    returns:
+        array  in  shape (n,)
+    """
+
+    if on_group_0 not in ("error", "zero", "equal"):
+        raise ValueError("invalid value for on_group_0")
+
+    if len(data_matrix1_d.shape) != 1:
+        raise DimensionStructureError(
+            "can only normalize one dimensional data, but shape is %s"
+            % data_matrix1_d.shape
+        )
+    n = data_matrix1_d.shape[0]
+
+    if len(group_matrix.shape) != 2 or group_matrix.shape[0] != n:
+        raise DimensionStructureError(
+            "Invalid group matrix, shape is %s" % group_matrix.shape
+        )
+    m = group_matrix.shape[1]
+
+    # all values must be >= 0
+    if not np.all(data_matrix1_d >= 0):
+        raise ValueError("Not all values >= 0 before normalization")
+
+    # EXAMPLE: n=5, m=2
+    # group_matrix=[[1, 0],[1, 0],  [0, 1],[0, 1],[0, 1]]
+    # data_matrix1_d=[[1], [2],   [3], [4], [5]]
+
+    # create sum for groups: (m, n) * (n,) = (m,)
+    sums = group_matrix.transpose().dot(data_matrix1_d)
+
+    # EXAMPLE: [[3], [12]]
+
+    # check that none is 0 (because we want to divide by it)
+    if not np.all(sums != 0):
+        if on_group_0 == "error":
+            raise ValueError("some groups add up to 0")
+        # replace 0 with (number of group members). this works, because
+        # it's only 0 if all elements are 0 ==> division by number = 0
+        n_members = np.sum(group_matrix, axis=0)
+        group_is_0 = sums == 0
+        sums += n_members * group_is_0
+        if on_group_0 == "equal":
+            # set all elements in groups to 1
+            # by dividing by group size, we get equal distribution
+            # first: repeat group_is_0: (m,) => (n, m)
+            group_is_0 = np.reshape(group_is_0, (1, m))
+
+            # EXAMPLE: [[1, 0]]
+            group_is_0 = np.repeat(group_is_0, n, axis=0)
+            # EXAMPLE: [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0]]
+
+            # multiply with group matrix and sum over axis: (n, m) => (n,)
+            group_is_0 = group_is_0 * group_matrix
+            # EXAMPLE: [[1, 0], [1, 0],   [0, 0], [0, 0], [0, 0]]
+            group_is_0 = np.sum(group_is_0, axis=1)
+            # EXAMPLE: [[1], [1],   [0], [0], [0]]
+
+            # add this to data
+            data_matrix1_d += group_is_0
+
+    # create inverse and repeat, sum: (m,) => (1, m) => (n, m)
+    sums = np.reshape(1 / sums, (1, m))
+    # EXAMPLE: [[1/3,   1/12]]
+    sums = np.repeat(sums, n, axis=0)
+    # EXAMPLE: [[1/3, 1/12], [1/3, 1/12],   [1/3, 1/12], [1/3, 1/12], [1/3, 1/12]]
+
+    # multiply with group matrix and sum over axis: (n, m) => (n,)
+    sums = sums * group_matrix
+    # EXAMPLE: [[1/3, 0], [1/3, 0],   [0, 1/12], [0, 1/12], [0, 1/12]]
+    sums = np.sum(sums, axis=1)
+    # EXAMPLE: [[1/3], [1/3],   [1/12], [1/12], [1/12]]
+
+    # multiply with data_matrix: (n, ) => (n,)
+    data = sums * data_matrix1_d
+    # EXAMPLE: [[1/3], [2/3],   [3/12], [4/12], [5/12]]
+
+    return data

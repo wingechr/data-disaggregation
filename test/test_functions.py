@@ -2,13 +2,14 @@ import unittest
 from functools import partial
 
 import numpy as np
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_almost_equal
 
 from data_disaggregation.functions import (
     create_group_matrix,
     create_weighted_group_matrix,
     get_path_up_down,
     group_unique_values,
+    normalize_groups,
 )
 
 
@@ -31,12 +32,12 @@ class TestFunctions(unittest.TestCase):
         # basic working example
         res = create_weighted_group_matrix([[1], [0.6, 0.4]])
         expected_res = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.4]])
-        assert_array_equal(res, expected_res)
+        assert_almost_equal(res, expected_res)
 
         # rescale
         res = create_weighted_group_matrix([[1], [6, 4]], on_err="rescale")
         expected_res = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.4]])
-        assert_array_equal(res, expected_res)
+        assert_almost_equal(res, expected_res)
 
         # wrong arguments
         res = partial(create_weighted_group_matrix, [[[1]]])
@@ -46,7 +47,7 @@ class TestFunctions(unittest.TestCase):
         # basic working example
         res = create_group_matrix([1, 2])
         expected_res = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0]])
-        assert_array_equal(res, expected_res)
+        assert_almost_equal(res, expected_res)
 
     def test_get_path_up_down(self):
         """
@@ -77,3 +78,54 @@ class TestFunctions(unittest.TestCase):
         path = tuple(pu) + tuple(pd)
         self.assertEqual(path, (3, 2, 4, 5))
         self.assertEqual(p, 1)
+
+    def test_normalize_groups(self):
+        group_matrix = np.array(
+            [
+                [1, 0],
+                [1, 0],
+                [0, 1],
+                [0, 1],
+                [0, 1],
+            ]
+        )
+
+        res = normalize_groups(
+            group_matrix=group_matrix,
+            data_matrix1_d=np.array([1, 2, 3, 4, 5]).transpose(),
+        )
+        assert_almost_equal(
+            res, np.array([1 / 3, 2 / 3, 3 / 12, 4 / 12, 5 / 12]).transpose()
+        )
+
+        # throw exception if group sum 0
+        res = partial(
+            normalize_groups,
+            group_matrix=group_matrix,
+            data_matrix1_d=np.array([0, 0, 3, 4, 5]).transpose(),
+        )
+        self.assertRaises(ValueError, res)
+
+        res = normalize_groups(
+            group_matrix=group_matrix,
+            data_matrix1_d=np.array([0, 0, 3, 4, 5]).transpose(),
+            on_group_0="zero",
+        )
+        assert_almost_equal(res, np.array([0, 0, 3 / 12, 4 / 12, 5 / 12]).transpose())
+
+        res = normalize_groups(
+            group_matrix=group_matrix,
+            data_matrix1_d=np.array([0, 0, 3, 4, 5]).transpose(),
+            on_group_0="equal",
+        )
+        assert_almost_equal(
+            res, np.array([0.5, 0.5, 3 / 12, 4 / 12, 5 / 12]).transpose()
+        )
+
+        # throw exception if any value < 0
+        res = partial(
+            normalize_groups,
+            group_matrix=group_matrix,
+            data_matrix1_d=np.array([-1, 2, 3, 4, 5]).transpose(),
+        )
+        self.assertRaises(ValueError, res)

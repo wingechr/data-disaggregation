@@ -16,6 +16,12 @@ from data_disaggregation.exceptions import AggregationError, ProgramNotFoundErro
 
 
 class TestVariable(unittest.TestCase):
+    def assertDictAlmostEqual(self, first, second):
+        # test equality of keys
+        self.assertEqual(set(first), set(second))
+        for k in first:
+            self.assertAlmostEqual(first[k], second[k], msg=k)
+
     @classmethod
     def setUpClass(cls):
         cls.time = Dimension("time")
@@ -94,6 +100,14 @@ class TestVariable(unittest.TestCase):
         res = partial(
             Weight,
             data={"01": 1, "03": 1, "05": 1},
+            dimension_level=self.day_hour,
+        )
+        self.assertRaises(ValueError, res)
+
+        # weight values must always be >= 0
+        res = partial(
+            Weight,
+            data={"01": -0.1, "02": 1.1, "03": 0.5, "05": 0.5},
             dimension_level=self.day_hour,
         )
         self.assertRaises(ValueError, res)
@@ -190,7 +204,7 @@ class TestVariable(unittest.TestCase):
 
         # test add
         v_add = v1 + v2
-        self.assertDictEqual(
+        self.assertDictAlmostEqual(
             v_add.to_dict(skip_0=True),
             {
                 (1, "r1"): 4,
@@ -201,7 +215,7 @@ class TestVariable(unittest.TestCase):
 
         # test subtract
         v_sub = v1 - v2
-        self.assertDictEqual(
+        self.assertDictAlmostEqual(
             v_sub.to_dict(skip_0=True),
             {
                 (1, "r1"): -2,
@@ -212,23 +226,23 @@ class TestVariable(unittest.TestCase):
 
         # test mult
         v_mult = v1 * v2
-        self.assertDictEqual(v_mult.to_dict(skip_0=True), {(1, "r1"): 3})
+        self.assertDictAlmostEqual(v_mult.to_dict(skip_0=True), {(1, "r1"): 3})
 
         # test truediv
-        # NOTE: division by 0 creates na, so we use fillna
+        # NOTE: division by 0 creates nan, so we use fillna
         v_div = v_mult / v2
-        self.assertDictEqual(v_div.fillna().to_dict(skip_0=True), {(1, "r1"): 1})
+        self.assertDictAlmostEqual(v_div.fillna().to_dict(skip_0=True), {(1, "r1"): 1})
 
         # test neg
         v_neg = -v_mult
-        self.assertDictEqual(v_neg.to_dict(skip_0=True), {(1, "r1"): -3})
+        self.assertDictAlmostEqual(v_neg.to_dict(skip_0=True), {(1, "r1"): -3})
 
         # ----------------------------------------------
         # test scalar
         # ----------------------------------------------
 
         v_add = v1 + 1
-        self.assertDictEqual(
+        self.assertDictAlmostEqual(
             v_add.to_dict(skip_0=True),
             {
                 (1, "r1"): 2,
@@ -247,13 +261,74 @@ class TestVariable(unittest.TestCase):
         # rmul
 
         v_rmul = 2 * v1
-        self.assertDictEqual(v_rmul.to_dict(skip_0=True), {(1, "r1"): 2, (1, "r2"): 4})
+        self.assertDictAlmostEqual(
+            v_rmul.to_dict(skip_0=True), {(1, "r1"): 2, (1, "r2"): 4}
+        )
 
         # rdiv
         # NOTE: will create inf for x/0
 
         rdiv = 12 / (v1 + 1) - 12
-        self.assertDictEqual(
+        self.assertDictAlmostEqual(
             rdiv.to_dict(skip_0=True),
             {(1, "r1"): -6, (1, "r2"): -8},  # 12 / (1 + 1) - 12  # 12 / (2 + 1) - 12
         )
+
+    def test_transform_on_group_0(self):
+        """test transformation when weight groups sum up to 0"""
+        # test 1: it's ok if value is also 0
+        d = Dimension("d")
+        d1 = d.add_level("d1", [1, 2])
+        d2 = d1.add_level("d2", {1: [11, 12], 2: [21, 22]})
+
+        v1 = ExtensiveVariable(
+            data={
+                1: 100,
+                2: 0,
+            },
+            domain=d1,
+        )
+        vw = ExtensiveVariable(
+            data={
+                11: 3,
+                12: 7,
+            },
+            domain=d2,
+        )
+
+        # default should not work
+        res = partial(v1.transform, d2, level_weights={"d2": vw})
+        self.assertRaises(ValueError, res)
+
+        # equal works
+        res = v1.transform(d2, level_weights={"d2": vw}, on_group_0="equal")
+        self.assertDictAlmostEqual(
+            res.to_dict(skip_0=True),
+            {
+                (11,): 30,
+                (12,): 70,
+            },
+        )
+
+        # "nan" works, because value is zero
+        res = v1.transform(d2, level_weights={"d2": vw}, on_group_0="nan")
+        self.assertDictAlmostEqual(
+            res.to_dict(skip_0=True),
+            {
+                (11,): 30,
+                (12,): 70,
+            },
+        )
+
+        # "nan" works NOT on v2, because value in 2 is NOT zero
+        # TODO: this is not working yet: raise exception when
+        #  disaggregating value != 0 with 0 sum weight
+        # v2 = ExtensiveVariable(
+        #    data={
+        #        1: 100,
+        #        2: 100,
+        #    },
+        #    domain=d1,
+        # )
+        # res = partial(v2.transform, d2, level_weights={"d2": vw}, on_group_0="nan")
+        # self.assertRaises(ValueError, res)

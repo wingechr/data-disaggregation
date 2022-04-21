@@ -115,8 +115,16 @@ class DimensionLevel:
         parent_elements = parent.elements
         set_parent_elements = set(parent_elements)
         set_grouped_elements = set(grouped_elements)
-        if set_parent_elements != set_grouped_elements:
-            raise DimensionStructureError("Parent set != element groups")
+        if set_grouped_elements - set_parent_elements:
+            raise DimensionStructureError(
+                "Elements not in parent level: %s"
+                % (set_grouped_elements - set_parent_elements)
+            )
+        elif set_parent_elements - set_grouped_elements:
+            raise DimensionStructureError(
+                "Missing elements from parent level: %s"
+                % (set_parent_elements - set_grouped_elements)
+            )
 
         elements = []
         group_sizes = []
@@ -540,8 +548,10 @@ class Variable(VariableBase, MixinNumpyMath):
     def __init__(self, data, domain, vartype, unit=None):
         self._unit = unit
 
-        if vartype not in ("intensive", "extensive", "weight"):
-            raise ValueError("vartype not in ('intensive', 'extensive', 'weight')")
+        if vartype not in ("intensive", "extensive", "weight", "weight_w_nan"):
+            raise ValueError(
+                "vartype not in ('intensive', 'extensive', 'weight_w_nan')"
+            )
 
         self._vartype = vartype
 
@@ -579,13 +589,23 @@ class Variable(VariableBase, MixinNumpyMath):
         if self.is_weight:
             if self._domain.size != 1:
                 raise DimensionStructureError("Weights must have exactly one dimension")
+
             # check values
+            if np.any(self._data_matrix < 0):
+                raise ValueError("all values must be >= 0")
+            if np.any(np.isnan(self._data_matrix)) and not self.is_weight_w_nan:
+                raise ValueError("all values must be >= 0")
+
             group_matrix = self._domain.dimension_levels[0].group_matrix
             # create sum for groups. shapes: (m, n) * (n,) = (m,)
             sums = group_matrix.transpose().dot(self._data_matrix)
             shape = (group_matrix.shape[1],)
             if not np.allclose(np.ones(shape), sums):
-                raise ValueError("Values in some groups don't add up to 1.0")
+                if self.is_weight_w_nan:
+                    # sums must be either 0 or 1
+                    pass  # FIXME
+                else:
+                    raise ValueError("Values in some groups don't add up to 1.0")
 
     def to_series(self):
         """Return indexed pandas Series"""
@@ -646,7 +666,7 @@ class Variable(VariableBase, MixinNumpyMath):
         Args:
         on_group_0(str, optional): how to handle group sums of 0: must be one of
             * 'error': the default, raises an Error
-            * 'zero': sets resulting weights to 0.
+            * 'nan': sets resulting weights to nan.
                this can lead to a loss of values on disaggregation
             * 'equal': sets resulting weights to 1/n
         """
@@ -656,14 +676,20 @@ class Variable(VariableBase, MixinNumpyMath):
         dimension_level = self._domain.dimension_levels[0]
         group_matrix = dimension_level.group_matrix
         data_matrix = self._data_matrix
+
         data = normalize_groups(group_matrix, data_matrix, on_group_0=on_group_0)
 
         # is_intensive=None ==> weights
+
+        vartype = "weight"
+        if np.any(np.isnan(data)) and on_group_0 == "nan":
+            vartype = "weight_w_nan"
+
         return Variable(
             domain=self._domain,
             data=data,
             unit=None,
-            vartype="weight",
+            vartype=vartype,
         )
 
     def aggregate(self, dimension_name, weights=None):
@@ -796,15 +822,31 @@ class Variable(VariableBase, MixinNumpyMath):
             weights_matrix = np.repeat(
                 np.reshape(weights_matrix, (1, n_cols)), n_rows, axis=0
             )
-            group_matrix *= weights_matrix
+            group_matrix *= np.nan_to_num(weights_matrix)
             # if group sums are all 1, sums in each row in group_matrix must be 1
             row_sums = np.sum(group_matrix, axis=1)
-            if not np.all(np.isclose(row_sums, 1)):
-                raise ValueError(
-                    """Aggregation checksum failed.
+
+            if not np.isclose(
+                np.sum(group_matrix), np.sum(np.nan_to_num(weights._data_matrix))
+            ):
+                raise Exception(
+                    """Aggregation checksum failed
+                    sum(weights) should be sum(group_matrix)
                     This should not happen (if weights are of type Weight)
                     """
                 )
+
+            if not np.all(np.isclose(row_sums, 1)):
+                if weights.is_weight_w_nan and np.all(
+                    np.isclose(row_sums, 1) | np.isclose(row_sums, 0)
+                ):
+                    # partially defined weights: row_sums can be 1 or 0
+                    pass
+                else:
+                    raise ValueError(
+                        """Aggregation checksum failed
+                    """
+                    )
 
         data_matrix = np.matmul(
             self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
@@ -900,7 +942,7 @@ class Variable(VariableBase, MixinNumpyMath):
                as weights for this level
             on_group_0(str, optional): how to handle group sums of 0: must be one of
             * 'error': the default, raises an Error
-            * 'zero': sets resulting weights to 0.
+            * 'nan': sets resulting weights to nan.
                this can lead to a loss of values on disaggregation
             * 'equal': sets resulting weights to 1/n
         Returns:
@@ -1002,7 +1044,7 @@ class Variable(VariableBase, MixinNumpyMath):
                as weights for this level
             on_group_0(str, optional): how to handle group sums of 0: must be one of
                 * 'error': the default, raises an Error
-                * 'zero': sets resulting weights to 0.
+                * 'nan': sets resulting weights to nan.
                    WARNING: this can lead to a loss of values on disaggregation
                 * 'equal': sets resulting weights to 1/n
         """
@@ -1048,7 +1090,12 @@ class Variable(VariableBase, MixinNumpyMath):
 
     @property
     def is_weight(self):
-        return self._vartype == "weight"
+        return self._vartype in ("weight", "weight_w_nan")
+
+    @property
+    def is_weight_w_nan(self):
+        """A weight where group sums can also be nan (partially defined)"""
+        return self._vartype == "weight_w_nan"
 
     @property
     def is_scalar(self):

@@ -108,10 +108,12 @@ class TestFunctions(unittest.TestCase):
 
         res = normalize_groups(
             group_matrix=group_matrix,
-            data_matrix1_d=np.array([0, 0, 3, 4, 5]).transpose(),
-            on_group_0="zero",
+            data_matrix1_d=np.array([0, 0, 3, 0, 5]).transpose(),
+            on_group_0="nan",
         )
-        assert_almost_equal(res, np.array([0, 0, 3 / 12, 4 / 12, 5 / 12]).transpose())
+        assert_almost_equal(
+            res, np.array([np.nan, np.nan, 3 / 8, 0 / 8, 5 / 8]).transpose()
+        )
 
         res = normalize_groups(
             group_matrix=group_matrix,

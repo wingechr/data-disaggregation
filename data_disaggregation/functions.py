@@ -148,15 +148,19 @@ def normalize_groups(
             so shape must be (n,)
         on_group_0(str, optional): how to handle group sums of 0: must be one of
             * 'error': the default, raises an Error
-            * 'zero': sets resulting weights to 0.
+            * 'nan': sets resulting weights to nan.
                this can lead to a loss of values on disaggregation
             * 'equal': sets resulting weights to 1/n
 
     returns:
         array  in  shape (n,)
     """
+    data_matrix1_d = data_matrix1_d.copy().astype("float")
 
-    if on_group_0 not in ("error", "zero", "equal"):
+    if np.any(data_matrix1_d < 0):
+        raise ValueError("all values must be >= 0")
+
+    if on_group_0 not in ("error", "nan", "equal"):
         raise ValueError("invalid value for on_group_0")
 
     if len(data_matrix1_d.shape) != 1:
@@ -189,29 +193,37 @@ def normalize_groups(
     if not np.all(sums != 0):
         if on_group_0 == "error":
             raise ValueError("some groups add up to 0")
+
         # replace 0 with (number of group members). this works, because
         # it's only 0 if all elements are 0 ==> division by number = 0
         n_members = np.sum(group_matrix, axis=0)
         group_is_0 = sums == 0
         sums += n_members * group_is_0
+
+        # set all elements in groups to 1
+        # by dividing by group size, we get equal distribution
+        # first: repeat group_is_0: (m,) => (n, m)
+        group_is_0 = np.reshape(group_is_0, (1, m))
+
+        # EXAMPLE: [[1, 0]]
+        group_is_0 = np.repeat(group_is_0, n, axis=0)
+        # EXAMPLE: [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0]]
+
+        # multiply with group matrix and sum over axis: (n, m) => (n,)
+        group_is_0 = group_is_0 * group_matrix
+        # EXAMPLE: [[1, 0], [1, 0],   [0, 0], [0, 0], [0, 0]]
+        group_is_0 = np.sum(group_is_0, axis=1)
+        # EXAMPLE: [[1], [1],   [0], [0], [0]]
+
         if on_group_0 == "equal":
-            # set all elements in groups to 1
-            # by dividing by group size, we get equal distribution
-            # first: repeat group_is_0: (m,) => (n, m)
-            group_is_0 = np.reshape(group_is_0, (1, m))
-
-            # EXAMPLE: [[1, 0]]
-            group_is_0 = np.repeat(group_is_0, n, axis=0)
-            # EXAMPLE: [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0]]
-
-            # multiply with group matrix and sum over axis: (n, m) => (n,)
-            group_is_0 = group_is_0 * group_matrix
-            # EXAMPLE: [[1, 0], [1, 0],   [0, 0], [0, 0], [0, 0]]
-            group_is_0 = np.sum(group_is_0, axis=1)
-            # EXAMPLE: [[1], [1],   [0], [0], [0]]
-
-            # add this to data
+            # add this to data (don't change the original)
             data_matrix1_d += group_is_0
+
+        if on_group_0 == "nan":
+            # set values in0-group to nan
+            group_is_not_0 = 1.0 - group_is_0
+            group_is_not_0[group_is_not_0 == 0.0] = np.nan
+            data_matrix1_d *= group_is_not_0
 
     # create inverse and repeat, sum: (m,) => (1, m) => (n, m)
     sums = np.reshape(1 / sums, (1, m))

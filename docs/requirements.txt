@@ -1,8 +1,7 @@
-sphinxcontrib-napoleon
-sphinxcontrib-mermaid
-m2r2
 nbsphinx
+sphinx_rtd_theme
 nbconvert>=6
 ipykernel
 pandas
-mistune>=2.0.1 # not directly required, pinned by Snyk to avoid a vulnerability
+sphinx
+myst-parser

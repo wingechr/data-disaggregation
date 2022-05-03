@@ -30,8 +30,10 @@ html_theme_options = {}
 html_theme = "sphinx_rtd_theme"
 master_doc = "index"
 source_encoding = "utf-8"
-source_suffix = [".rst", ".md"]
-
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 
 pygments_style = "sphinx"
 html_logo = os.path.join(docs_path, "_static/logo.svg")
@@ -50,14 +52,9 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.graphviz",
-    # sphinxcontrib
-    # "sphinxcontrib.mermaid",
-    # TODO: not working with python 3.10:
-    # https://github.com/sphinx-contrib/napoleon/issues/9
-    "sphinxcontrib.napoleon",  # requires sphinxcontrib-napoleon
-    "m2r2",  # new md -> rst
-    # "sphinx_click",  # requires sphinx-click
+    "sphinx.ext.napoleon",
     "nbsphinx",
+    "myst_parser",  # markdown
 ]
 
 # Napoleon settings
@@ -95,11 +92,3 @@ mathjax_config = {
 
 # graphviz
 graphviz_output_format = "svg"  # svg | png
-
-# fix warnings about docstring referencing builtin types
-nitpick_ignore = [
-    #    ("py:obj", "int"),
-    #    ("py:obj", "str"),
-    #    ("py:obj", "bool"),
-    #    ("py:obj", "optional"),
-]

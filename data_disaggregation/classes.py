@@ -665,6 +665,7 @@ class Variable(VariableBase, MixinNumpyMath):
 
         Args:
         on_group_0(str, optional): how to handle group sums of 0: must be one of
+
             * 'error': the default, raises an Error
             * 'nan': sets resulting weights to nan.
                this can lead to a loss of values on disaggregation
@@ -1043,6 +1044,7 @@ class Variable(VariableBase, MixinNumpyMath):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
             on_group_0(str, optional): how to handle group sums of 0: must be one of
+
                 * 'error': the default, raises an Error
                 * 'nan': sets resulting weights to nan.
                    WARNING: this can lead to a loss of values on disaggregation

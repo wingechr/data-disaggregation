@@ -1,3 +1,2 @@
-numpy
-# optional (for additional features)
+numpy>=1.22
 pandas

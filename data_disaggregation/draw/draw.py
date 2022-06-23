@@ -1,5 +1,6 @@
 import subprocess as sp
 
+from ..classes import Domain, Variable
 from ..exceptions import ProgramNotFoundError
 
 ATTRIBUTES = {
@@ -102,14 +103,26 @@ def get_dot_digraph_str(dot_components):
     return "digraph{\n%s\n}" % components_str
 
 
-def draw_domain(variable, filetype="png", dpi=150):
+def draw_domain(obj, filetype="png", dpi=150):
     """create image from variable transormation steps
     Args:
-        variable: Variable object
+        obj: Variable or domain object
         filetype(str): "png" or "svg"
         dpi(int): resolution for png image
     """
-    steps = variable.get_transform_steps(variable._domain)
+    if isinstance(obj, Variable):
+        variable = obj
+        domain = variable._domain
+    else:
+        if not isinstance(obj, Domain):
+            domain = Domain(obj)
+        else:
+            domain = obj
+        # create dummy variable
+        variable = Variable(data={}, domain=domain, vartype="extensive")
+
+    # create dummy transform of variable to self
+    steps = variable.get_transform_steps(domain)
     return draw_transform(steps, filetype=filetype, dpi=dpi)
 
 

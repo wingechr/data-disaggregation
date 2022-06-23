@@ -21,6 +21,7 @@ try:
         ExtensiveVariable,
         IntensiveScalar,
         IntensiveVariable,
+        MapVariable,
         Variable,
         Weight,
     )
@@ -38,4 +39,7 @@ __all__ = [
     "IntensiveVariable",
     "Variable",
     "Weight",
+    "MapVariable",
+    "draw",
+    "exceptions",
 ]

@@ -41,6 +41,7 @@ STYLES = {
     "edge_root": {"style": "dotted", "color": "#a0a0a0"},
     "edge_down": {"arrowhead": "normal", "style": "bold"},
     "edge_up": {"arrowtail": "normal", "style": "bold"},
+    "edge_map": {"arrowtail": "normal", "style": "bold", "color": "#e0a0a0"},
 }
 
 
@@ -103,6 +104,14 @@ def get_dot_digraph_str(dot_components):
     return "digraph{\n%s\n}" % components_str
 
 
+def _get_domain(obj):
+    if isinstance(obj, Variable):
+        return obj.domain
+    if not isinstance(obj, Domain):
+        return Domain(obj)
+    return obj
+
+
 def draw_domain(obj, filetype="png", dpi=150):
     """create image from variable transormation steps
     Args:
@@ -110,25 +119,14 @@ def draw_domain(obj, filetype="png", dpi=150):
         filetype(str): "png" or "svg"
         dpi(int): resolution for png image
     """
-    if isinstance(obj, Variable):
-        variable = obj
-        domain = variable._domain
-    else:
-        if not isinstance(obj, Domain):
-            domain = Domain(obj)
-        else:
-            domain = obj
-        # create dummy variable
-        variable = Variable(data={}, domain=domain, vartype="extensive")
-
-    # create dummy transform of variable to self
-    steps = variable.get_transform_steps(domain)
-    return draw_transform(steps, filetype=filetype, dpi=dpi)
+    dim_steps = {}
+    return draw_transform(obj, dim_steps, filetype=filetype, dpi=dpi)
 
 
-def draw_transform(dim_steps, filetype="png", dpi=150, weight_names=None):
+def draw_transform(obj, dim_steps, filetype="png", dpi=150, weight_names=None):
     """create image from variable transormation steps
     Args:
+        obj: Variable or domain object
         dim_steps(OrderedDict): dimension -> steps
           * each element contains steps for a dimension
           * dimensions are all dimensions in source and target domain
@@ -138,6 +136,12 @@ def draw_transform(dim_steps, filetype="png", dpi=150, weight_names=None):
         weight_names(dict, optional): str -> str mapping of weight level
           to variable name that will be shown on edges
     """
+    domain = _get_domain(obj)
+    # fill dummy steps
+    for dimension_level in domain.dimension_levels:
+        dim = dimension_level.dimension
+        if not dim_steps.get(dim):
+            dim_steps[dim] = [(dimension_level, dimension_level, "keep", None)]
     dot_cmd = get_dot_cmd(filetype=filetype, dpi=dpi)
     dot_components = get_components(dim_steps, weight_names=weight_names)
     dot_str = get_dot_digraph_str(dot_components)
@@ -152,6 +156,7 @@ def get_transform_path(steps, weight_names=None):
     transform_path = {
         "edges_up": set(),
         "edges_down": set(),
+        "edges_map": set(),
         "squeeze": False,
         "expand": False,
         "node_start": None,
@@ -178,6 +183,8 @@ def get_transform_path(steps, weight_names=None):
             transform_path["squeeze"] = True
         elif action == "expand":
             transform_path["expand"] = True
+        elif action == "map":
+            transform_path["edges_map"].add((from_level, to_level))
         elif action == "keep":
             # from_level == to_level
             transform_path["node_keep"] = from_level
@@ -186,7 +193,11 @@ def get_transform_path(steps, weight_names=None):
 
         if weight:
             # determine weight name
-            weight_name = "<weight>"
+            if action == "map":
+                weight_name = "<map>"
+            else:
+                weight_name = "<weight>"
+
             if weight_names:
                 if action == "aggregate" and from_level.name in weight_names:
                     weight_name = weight_names[from_level.name]
@@ -258,6 +269,18 @@ def get_components(dim_steps, weight_names=None):
                 )
             )
 
+        # add new edges for maps
+        for node_from, node_to in transform_path["edges_map"]:
+            edge_id = (get_node_id(node_from), get_node_id(node_to))
+            edge_attrs = get_edge_attrs(node_from, node_to, transform_path)
+            print(edge_attrs)
+            dot_components.append(
+                (
+                    edge_id,
+                    edge_attrs,
+                )
+            )
+
     return dot_components
 
 
@@ -300,6 +323,12 @@ def get_edge_attrs(node, parent, transform_path):
         or edge_key_up in transform_path["edges_up"]
     ):
         edge_attr.update(STYLES["edge_up"])
+    elif (
+        edge_key_down in transform_path["edges_map"]
+        or edge_key_up in transform_path["edges_map"]
+    ):
+        edge_attr.update(STYLES["edge_map"])
+
     weight_name = transform_path["edges_weight"].get(edge_key_down) or transform_path[
         "edges_weight"
     ].get(edge_key_up)

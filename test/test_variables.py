@@ -6,8 +6,10 @@ from numpy.testing import assert_array_equal
 
 from data_disaggregation.classes import (
     Dimension,
+    Domain,
     ExtensiveVariable,
     IntensiveScalar,
+    MapVariable,
     Variable,
     Weight,
 )
@@ -180,7 +182,7 @@ class TestVariable(unittest.TestCase):
         )
         steps = v1.get_transform_steps(domain=[self.region])
         try:
-            image_bytes = draw_transform(steps, filetype="svg")
+            image_bytes = draw_transform(v1, steps, filetype="svg")
         except ProgramNotFoundError:
             return  # dot not in PATH
         self.assertTrue(image_bytes.decode().startswith("<?xml"))
@@ -332,3 +334,29 @@ class TestVariable(unittest.TestCase):
         # )
         # res = partial(v2.transform, d2, level_weights={"d2": vw}, on_group_0="nan")
         # self.assertRaises(ValueError, res)
+
+    def test_map(self):
+        d = Dimension("D")
+        d1 = d.add_level("D1", ["d11", "d12"])
+        d2 = d.add_level("D2", ["d21", "d22", "d23"])
+        v1 = ExtensiveVariable({"d11": 1, "d12": 2}, d1)
+        m = MapVariable(
+            {
+                ("d11", "d21"): 1 / 2,
+                ("d11", "d22"): 1 / 2,
+                ("d12", "d22"): 1 / 3,
+                ("d12", "d23"): 2 / 3,
+            },
+            [d1, d2],
+        )
+        self.assertEqual(m.domain.shape, (2, 3))
+        v2 = v1.map(m)
+        self.assertEqual(v2.domain, Domain(d2))
+        self.assertDictAlmostEqual(
+            v2.to_dict(skip_0=True, keys_flat_1d=True),
+            {
+                "d21": 1 * 1 / 2,
+                "d22": 1 * 1 / 2 + 2 * 1 / 3,
+                "d23": 2 * 2 / 3,
+            },
+        )

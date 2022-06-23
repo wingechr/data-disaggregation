@@ -233,49 +233,14 @@ class Dimension(DimensionLevel):
         super().__init__(parent=None, name=name, grouped_elements=None)
 
 
-class Domain:
-    """List of DimensionLevel
-
-    Comparable to pandas.MultiIndex
-
-    Args:
-        dimension_levels: either
-
-          * list of DimensionLevel
-          * a single DimensionLevel
-          * None (Scalar)
-
-    """
-
-    def __init__(self, dimension_levels):
-        dimension_levels = dimension_levels or []
-        if isinstance(dimension_levels, DimensionLevel):
-            dimension_levels = [dimension_levels]
-
-        # dimensions are added by dimension name!
-        # TODO: what if we want multiple spacial dimensions? we could use alias,
-        # but then it would be harder/impossible to automatically trnasform variables
-        self._dimension_levels = OrderedDict()
-        for d in dimension_levels:
-            key = d.dimension_name
-            if key in self._dimension_levels:
-                raise DuplicateNameError("Duplicate dimension: %s" % d)
-            self._dimension_levels[key] = d
-
-        self._dimension_name2index = dict(
-            (n, i) for i, n in enumerate(self.dimension_names)
-        )
-
+class _DomainBase:
+    def __init__(self, dimension_levels_dict):
+        self._dimension_levels = dimension_levels_dict
         self._size = len(self.dimension_levels)
         self._shape = tuple(d.size for d in self.dimension_levels)
         self._keys = tuple(product(*[d.elements for d in self.dimension_levels]))
         self._indices = tuple(product(*[d._indices for d in self.dimension_levels]))
         self._key2index = dict(zip(self._keys, self._indices))
-
-    def __str__(self):
-        dims = self._dimension_levels.items()
-        dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
-        return "(" + dims_str + ")"
 
     def __eq__(self, other):
         return self._size == other._size and all(
@@ -314,6 +279,75 @@ class Domain:
             data_dict[key] = rec[value]
         return self.dict_to_matrix(data_dict)
 
+    @property
+    def dimension_levels(self):
+        return tuple(self._dimension_levels.values())
+
+    @property
+    def dimension_level_names(self):
+        return tuple(d.name for d in self.dimension_levels)
+
+    @property
+    def size(self):
+        return self._size
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def is_scalar(self):
+        return self.size == 0
+
+
+class Domain(_DomainBase):
+    """List of DimensionLevel
+
+    Comparable to pandas.MultiIndex
+
+    Args:
+        dimension_levels: either
+
+          * list of DimensionLevel
+          * a single DimensionLevel
+          * None (Scalar)
+
+    """
+
+    def __init__(self, dimension_levels):
+        dimension_levels = dimension_levels or []
+        if isinstance(dimension_levels, DimensionLevel):
+            dimension_levels = [dimension_levels]
+
+        # dimensions are added by dimension name!
+        # TODO: what if we want multiple spacial dimensions? we could use alias,
+        # but then it would be harder/impossible to automatically transform variables
+        dimension_levels_dict = OrderedDict()
+        for d in dimension_levels:
+            key = d.dimension_name
+            if key in dimension_levels_dict:
+                raise DuplicateNameError("Duplicate dimension: %s" % d)
+            dimension_levels_dict[key] = d
+
+        super().__init__(dimension_levels_dict)
+
+        self._dimension_name2index = dict(
+            (n, i) for i, n in enumerate(self.dimension_names)
+        )
+
+    def __str__(self):
+        dims = self._dimension_levels.items()
+        dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
+        return "(" + dims_str + ")"
+
+    @property
+    def dimension_names(self):
+        return tuple(d.name for d in self.dimensions)
+
+    @property
+    def dimensions(self):
+        return tuple(d.dimension for d in self.dimension_levels)
+
     def get_dimension_index(self, dimension_name):
         """get numerical index of dimension from name
 
@@ -346,37 +380,103 @@ class Domain:
         """
         return self._dimension_levels[dimension_name]
 
-    @property
-    def dimension_levels(self):
-        return tuple(self._dimension_levels.values())
+
+class _VariableBase:
+    def __init__(self, data, domain, vartype, unit=None):
+        self._unit = unit
+
+        if vartype not in ("intensive", "extensive", "weight", "weight_w_nan", "map"):
+            raise ValueError(
+                "vartype not in ('intensive', 'extensive', 'weight_w_nan')", "map"
+            )
+        self._vartype = vartype
+
+        if not isinstance(domain, _DomainBase):
+            raise TypeError("Wrong type for Domain")
+        self._domain = domain
+
+        # set data
+        if isinstance(data, dict):
+            self._data_matrix = self.domain.dict_to_matrix(data)
+        elif isinstance(data, list):
+            self._data_matrix = self.domain.records_to_matrix(data)
+        elif pd and isinstance(data, pd.Series):
+            if not data.index.is_unique:
+                raise KeyError("Index must be unique")
+            self._data_matrix = self.domain.dict_to_matrix(data.to_dict())
+        elif isinstance(data, np.ndarray):
+            self._data_matrix = data.copy()
+        elif self.is_scalar:
+            data = float(data)
+            self._data_matrix = self.domain.dict_to_matrix({tuple(): data})
+        else:
+            raise TypeError(type(data))
+
+        if self.domain.shape != self._data_matrix.shape:
+            raise DimensionStructureError(
+                "Shape of data %s != shape of domain %s"
+                % (self._data_matrix.shape, self.domain.shape)
+            )
+
+    def to_series(self):
+        """Return indexed pandas Series"""
+        if not pd:
+            raise ImportError("pandas could not be imported")
+
+        # TODO: REALLY check that alignment of keys and values is correct!!
+        # special case scalar
+        # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
+        # flatten into array C-style
+        data = self._data_matrix.flatten("C")
+
+        if not self.domain.dimensions:
+            index = None
+        elif self.domain.size == 1:  # one dimensional index
+            dimension_level = self.domain.dimension_levels[0]
+            index = pd.Index(dimension_level.elements, name=dimension_level.name)
+        else:  # multilevel index
+            index = pd.MultiIndex.from_tuples(
+                self.domain._keys, names=self.domain.dimension_level_names
+            )
+
+        return pd.Series(data, index=index)
+
+    def to_dict(self, skip_0=False, keys_flat_1d=False):
+        """Return data as an dict
+
+        Args:
+            skip_0(bool, optional): if True: do not include cells with value == 0
+            flakeys_flat_1dt_1d(bool, optional): if True, only if 1-dimensional:
+                keys are not tuples, but just values
+        """
+        res = {}
+        for idx, key in zip(self.domain._indices, self.domain._keys):
+            val = self._data_matrix[idx]
+            if val or not skip_0:
+                if keys_flat_1d and self.domain.size == 1:
+                    key = key[0]
+                res[key] = val
+        return res
+
+    def to_records(self, skip_0=False, value="value"):
+        """Return data as an iterable of records
+
+        Args:
+            skip_0(bool, optional): if True: do not include cells with value == 0
+            value(str, optional): name of the value column
+        """
+        res = []
+        dimension_level_names = self.domain.dimension_level_names
+        for key, val in self.to_dict(skip_0=skip_0).items():
+            rec = dict(zip(dimension_level_names, key))
+            rec[value] = val
+            res.append(rec)
+
+        return res
 
     @property
-    def dimensions(self):
-        return tuple(d.dimension for d in self.dimension_levels)
-
-    @property
-    def dimension_names(self):
-        return tuple(d.name for d in self.dimensions)
-
-    @property
-    def dimension_level_names(self):
-        return tuple(d.name for d in self.dimension_levels)
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def is_scalar(self):
-        return self.size == 0
-
-
-class VariableBase:
-    pass
+    def domain(self):
+        return self._domain
 
 
 class MixinNumpyMath:
@@ -384,7 +484,7 @@ class MixinNumpyMath:
 
     def _get_unit_add(self, other):
         unit = self._unit
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             other_unit = other._unit
         else:
             other_unit = unit
@@ -394,7 +494,7 @@ class MixinNumpyMath:
 
     def _get_unit_mult(self, other):
         unit = self._unit
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             other_unit = other._unit
         else:
             other_unit = unit
@@ -404,7 +504,7 @@ class MixinNumpyMath:
 
     def _get_unit_div(self, other):
         unit = self._unit
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             other_unit = other._unit
         else:
             other_unit = unit
@@ -414,7 +514,7 @@ class MixinNumpyMath:
 
     def _get_unit_rdiv(self, other):
         unit = self._unit
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             other_unit = other._unit
         else:
             other_unit = unit
@@ -424,7 +524,7 @@ class MixinNumpyMath:
 
     def _get_vartype(self, other):
         vartype = self._vartype
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             other_vartype = other._vartype
         else:
             other_vartype = vartype
@@ -436,9 +536,9 @@ class MixinNumpyMath:
 
     def _get_domain(self, other):
         # domain must be either equal, or one must be a scalar
-        domain = self._domain
-        if isinstance(other, VariableBase):
-            other_domain = other._domain
+        domain = self.domain
+        if isinstance(other, _VariableBase):
+            other_domain = other.domain
         else:
             other_domain = domain
         if domain.is_scalar:
@@ -451,7 +551,7 @@ class MixinNumpyMath:
 
     @staticmethod
     def _get_data_matrix_other(other):
-        if isinstance(other, VariableBase):
+        if isinstance(other, _VariableBase):
             data_matrix = other._data_matrix
         else:
             data_matrix = other
@@ -508,14 +608,14 @@ class MixinNumpyMath:
     # unary methods
     def __neg__(self):
         data = -self._data_matrix
-        return Variable(data, self._domain, self._vartype, unit=self._unit)
+        return Variable(data, self.domain, self._vartype, unit=self._unit)
 
     def fillna(self, value=0):
         data = np.nan_to_num(self._data_matrix, nan=value)
-        return Variable(data, self._domain, self._vartype, unit=self._unit)
+        return Variable(data, self.domain, self._vartype, unit=self._unit)
 
 
-class Variable(VariableBase, MixinNumpyMath):
+class Variable(_VariableBase, MixinNumpyMath):
     """Data container over a multidimensional domain.
 
     Comparable to pandas.Series with multiindex
@@ -546,48 +646,16 @@ class Variable(VariableBase, MixinNumpyMath):
     """
 
     def __init__(self, data, domain, vartype, unit=None):
-        self._unit = unit
-
-        if vartype not in ("intensive", "extensive", "weight", "weight_w_nan"):
-            raise ValueError(
-                "vartype not in ('intensive', 'extensive', 'weight_w_nan')"
-            )
-
-        self._vartype = vartype
-
         # set domain
         if not domain:  # Scalar
-            self._domain = Domain([])
-        elif isinstance(domain, Domain):
-            self._domain = domain
-        else:
-            self._domain = Domain(domain)
+            domain = Domain([])
+        elif not isinstance(domain, Domain):
+            domain = Domain(domain)
 
-        # set data
-        if isinstance(data, dict):
-            self._data_matrix = self._domain.dict_to_matrix(data)
-        elif isinstance(data, list):
-            self._data_matrix = self._domain.records_to_matrix(data)
-        elif pd and isinstance(data, pd.Series):
-            if not data.index.is_unique:
-                raise KeyError("Index must be unique")
-            self._data_matrix = self._domain.dict_to_matrix(data.to_dict())
-        elif isinstance(data, np.ndarray):
-            self._data_matrix = data.copy()
-        elif self.is_scalar:
-            data = float(data)
-            self._data_matrix = self._domain.dict_to_matrix({tuple(): data})
-        else:
-            raise TypeError(type(data))
-
-        if self._domain.shape != self._data_matrix.shape:
-            raise DimensionStructureError(
-                "Shape of data %s != shape of domain %s"
-                % (self._data_matrix.shape, self._domain.shape)
-            )
+        super().__init__(data, domain, vartype, unit=unit)
 
         if self.is_weight:
-            if self._domain.size != 1:
+            if self.domain.size != 1:
                 raise DimensionStructureError("Weights must have exactly one dimension")
 
             # check values
@@ -596,7 +664,7 @@ class Variable(VariableBase, MixinNumpyMath):
             if np.any(np.isnan(self._data_matrix)) and not self.is_weight_w_nan:
                 raise ValueError("all values must be >= 0")
 
-            group_matrix = self._domain.dimension_levels[0].group_matrix
+            group_matrix = self.domain.dimension_levels[0].group_matrix
             # create sum for groups. shapes: (m, n) * (n,) = (m,)
             sums = group_matrix.transpose().dot(self._data_matrix)
             shape = (group_matrix.shape[1],)
@@ -606,58 +674,6 @@ class Variable(VariableBase, MixinNumpyMath):
                     pass  # FIXME
                 else:
                     raise ValueError("Values in some groups don't add up to 1.0")
-
-    def to_series(self):
-        """Return indexed pandas Series"""
-        if not pd:
-            raise ImportError("pandas could not be imported")
-
-        # TODO: REALLY check that alignment of keys and values is correct!!
-        # special case scalar
-        # https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flatten.html
-        # flatten into array C-style
-        data = self._data_matrix.flatten("C")
-
-        if not self._domain.dimensions:
-            index = None
-        elif self._domain.size == 1:  # one dimensional index
-            dimension_level = self._domain.dimension_levels[0]
-            index = pd.Index(dimension_level.elements, name=dimension_level.name)
-        else:  # multilevel index
-            index = pd.MultiIndex.from_tuples(
-                self._domain._keys, names=self._domain.dimension_level_names
-            )
-
-        return pd.Series(data, index=index)
-
-    def to_dict(self, skip_0=False):
-        """Return data as an dict
-
-        Args:
-            skip_0(bool, optional): if True: do not include cells with value == 0
-        """
-        res = {}
-        for idx, key in zip(self._domain._indices, self._domain._keys):
-            val = self._data_matrix[idx]
-            if val or not skip_0:
-                res[key] = val
-        return res
-
-    def to_records(self, skip_0=False, value="value"):
-        """Return data as an iterable of records
-
-        Args:
-            skip_0(bool, optional): if True: do not include cells with value == 0
-            value(str, optional): name of the value column
-        """
-        res = []
-        dimension_level_names = self._domain.dimension_level_names
-        for key, val in self.to_dict(skip_0=skip_0).items():
-            rec = dict(zip(dimension_level_names, key))
-            rec[value] = val
-            res.append(rec)
-
-        return res
 
     def to_weight(self, on_group_0="error"):
         """Convert variable into weight.
@@ -672,9 +688,9 @@ class Variable(VariableBase, MixinNumpyMath):
             * 'equal': sets resulting weights to 1/n
         """
 
-        if self._domain.size != 1:
+        if self.domain.size != 1:
             raise DimensionStructureError("Weights must have exactly one dimension")
-        dimension_level = self._domain.dimension_levels[0]
+        dimension_level = self.domain.dimension_levels[0]
         group_matrix = dimension_level.group_matrix
         data_matrix = self._data_matrix
 
@@ -687,7 +703,7 @@ class Variable(VariableBase, MixinNumpyMath):
             vartype = "weight_w_nan"
 
         return Variable(
-            domain=self._domain,
+            domain=self.domain,
             data=data,
             unit=None,
             vartype=vartype,
@@ -703,9 +719,8 @@ class Variable(VariableBase, MixinNumpyMath):
         """
 
         # get the current level of the dimension
-        dimension_levels = list(self._domain.dimension_levels)
-        dim_idx = self._domain.get_dimension_index(dimension_name)
-        dim_idx_last = len(dimension_levels) - 1
+        dimension_levels = list(self.domain.dimension_levels)
+        dim_idx = self.domain.get_dimension_index(dimension_name)
         dimension_level = dimension_levels[dim_idx]
 
         if dimension_level.is_dimension_root:
@@ -724,14 +739,14 @@ class Variable(VariableBase, MixinNumpyMath):
 
         if weights:
 
-            logging.debug("weights: %s", weights._domain)
+            logging.debug("weights: %s", weights.domain)
 
-            if weights._domain.size != 1:
+            if weights.domain.size != 1:
                 raise AggregationError("weights domain must be exacly one dimension")
-            if weights._domain.dimension_levels[0] != dimension_level:
+            if weights.domain.dimension_levels[0] != dimension_level:
                 raise AggregationError(
                     "weights domain for aggregation must be %s, not %s"
-                    % (Domain([dimension_level]), weights._domain)
+                    % (Domain([dimension_level]), weights.domain)
                 )
             if not weights.is_weight:
                 raise TypeError("weight is not of type Weight")
@@ -748,11 +763,27 @@ class Variable(VariableBase, MixinNumpyMath):
 
             group_matrix *= weights_matrix
 
+        map_var = MapVariable(group_matrix, [dimension_level, new_dimension_level])
+        return self.map(map_var)
+
+    def map(self, map_var):
+
+        # get the current level of the dimension
+        if not isinstance(map_var, MapVariable):
+            raise TypeError("Must be of type MapVariable")
+        dimension_name = map_var.domain.dimension.name
+        dimension_levels = list(self.domain.dimension_levels)
+        dim_idx = self.domain.get_dimension_index(dimension_name)
+        dim_idx_last = len(dimension_levels) - 1
+        dimension_level = dimension_levels[dim_idx]
+        if dimension_level != map_var.domain.dimension_level_from:
+            raise DimensionStructureError("Wrong dimension level")
+        new_dimension_level = map_var.domain.dimension_level_to
         dimension_levels[dim_idx] = new_dimension_level
         new_domain = Domain(dimension_levels)
 
         data_matrix = np.matmul(
-            self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
+            self._data_matrix.swapaxes(dim_idx, dim_idx_last), map_var._data_matrix
         ).swapaxes(dim_idx_last, dim_idx)
 
         return Variable(
@@ -777,9 +808,8 @@ class Variable(VariableBase, MixinNumpyMath):
                 "extensive disaggregation without weights for %s" % dimension_level_name
             )
 
-        dimension_levels = list(self._domain.dimension_levels)
-        dim_idx = self._domain.get_dimension_index(dimension_name)
-        dim_idx_last = len(dimension_levels) - 1
+        dimension_levels = list(self.domain.dimension_levels)
+        dim_idx = self.domain.get_dimension_index(dimension_name)
         dimension_level = dimension_levels[dim_idx]
 
         try:
@@ -791,7 +821,6 @@ class Variable(VariableBase, MixinNumpyMath):
             )
 
         dimension_levels[dim_idx] = new_dimension_level
-        new_domain = Domain(dimension_levels)
 
         group_matrix = new_dimension_level.group_matrix.transpose()
 
@@ -804,8 +833,8 @@ class Variable(VariableBase, MixinNumpyMath):
 
         if weights:
             if (
-                len(weights._domain.dimensions) != 1
-                or weights._domain.dimension_levels[0] != new_dimension_level
+                len(weights.domain.dimensions) != 1
+                or weights.domain.dimension_levels[0] != new_dimension_level
             ):
                 raise AggregationError(
                     "weights domain for disaggregation must be %s"
@@ -849,16 +878,9 @@ class Variable(VariableBase, MixinNumpyMath):
                     """
                     )
 
-        data_matrix = np.matmul(
-            self._data_matrix.swapaxes(dim_idx, dim_idx_last), group_matrix
-        ).swapaxes(dim_idx_last, dim_idx)
-
-        return Variable(
-            domain=new_domain,
-            data=data_matrix,
-            unit=self._unit,
-            vartype=self._vartype,
-        )
+        # TODO: this is just to see if MapVariable work, we only need group_matrix
+        map_var = MapVariable(group_matrix, [dimension_level, new_dimension_level])
+        return self.map(map_var)
 
     def expand(self, dimension):
         """add dimension on aggregated level
@@ -875,8 +897,8 @@ class Variable(VariableBase, MixinNumpyMath):
             dimension = dimension.dimension
 
         logging.debug("adding %s" % (dimension.name,))
-        data_matrix = np.expand_dims(self._data_matrix, axis=self._domain.size)
-        domain = Domain(list(self._domain.dimension_levels) + [dimension])
+        data_matrix = np.expand_dims(self._data_matrix, axis=self.domain.size)
+        domain = Domain(list(self.domain.dimension_levels) + [dimension])
         return Variable(
             domain=domain,
             data=data_matrix,
@@ -893,17 +915,17 @@ class Variable(VariableBase, MixinNumpyMath):
 
         logging.debug("removing %s" % (dimension_name,))
 
-        dim_idx = self._domain.get_dimension_index(dimension_name)
+        dim_idx = self.domain.get_dimension_index(dimension_name)
 
-        if not self._domain.dimension_levels[dim_idx].is_dimension_root:
+        if not self.domain.dimension_levels[dim_idx].is_dimension_root:
             raise DimensionStructureError(
                 "can only squeeze dimension if it is fully aggregated"
             )
 
         data_matrix = np.squeeze(self._data_matrix, axis=dim_idx)
         domain = Domain(
-            self._domain.dimension_levels[:dim_idx]
-            + self._domain.dimension_levels[dim_idx + 1 :]
+            self.domain.dimension_levels[:dim_idx]
+            + self.domain.dimension_levels[dim_idx + 1 :]
         )
         return Variable(
             domain=domain,
@@ -919,14 +941,14 @@ class Variable(VariableBase, MixinNumpyMath):
             dimension_names(list): list of names of existing dimensions
               in desired order
         """
-        if set(dimension_names) != set(self._domain.dimension_names):
+        if set(dimension_names) != set(self.domain.dimension_names):
             raise DimensionStructureError(
                 "reordering must contain all dimensions of origin al data"
             )
 
-        indices = [self._domain.get_dimension_index(n) for n in dimension_names]
+        indices = [self.domain.get_dimension_index(n) for n in dimension_names]
         data_matrix = self._data_matrix.transpose(indices)
-        domain = Domain([self._domain.dimension_levels[i] for i in indices])
+        domain = Domain([self.domain.dimension_levels[i] for i in indices])
         return Variable(
             domain=domain,
             data=data_matrix,
@@ -934,13 +956,17 @@ class Variable(VariableBase, MixinNumpyMath):
             vartype=self._vartype,
         )
 
-    def get_transform_steps(self, domain, level_weights=None, on_group_0="error"):
+    def get_transform_steps(
+        self, domain, level_weights=None, dimension_maps=None, on_group_0="error"
+    ):
         """
         Args:
             domain: list of DimensionLevel instances (or Domain instance)
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
+            dimension_maps(list, optional): list of MapVariables that will be used
+               to shortcut the regular disaggregation/aggregation path
             on_group_0(str, optional): how to handle group sums of 0: must be one of
             * 'error': the default, raises an Error
             * 'nan': sets resulting weights to nan.
@@ -955,12 +981,14 @@ class Variable(VariableBase, MixinNumpyMath):
         if not isinstance(domain, Domain):
             domain = Domain(domain)
         level_weights = level_weights or {}
+        used_level_weights = set()
 
         def get_weights(dimension_level):
             level_name = dimension_level.name
             weights = level_weights.get(level_name)
             if not weights:
                 return None
+            used_level_weights.add(level_name)
             try:
                 weights = weights.transform(Domain([dimension_level]))
                 weights = weights.to_weight(on_group_0=on_group_0)
@@ -968,8 +996,29 @@ class Variable(VariableBase, MixinNumpyMath):
                 raise AggregationError("Cannot transform weight: %s" % weights)
             return weights
 
+        dim_dimension_maps = {}
+        used_dimension_maps = set()
+        for dmap in dimension_maps or []:
+            if not isinstance(dmap, MapVariable):
+                raise TypeError("dimension_map must be MapVariable")
+            dim_name = dmap.domain.dimension.name
+            if dim_name in dim_dimension_maps:
+                raise DimensionStructureError(
+                    "can only use one dimension map per dimension"
+                )
+            dim_dimension_maps[dim_name] = dmap
+
+        def get_dimension_map(source_level, target_level):
+            name = source_level.dimension.name
+            if name in dim_dimension_maps:
+                dimension_map = dim_dimension_maps[name]
+                if dimension_map.domain != MapDomain([source_level, target_level]):
+                    raise DimensionStructureError("Invalid dimension_map levels")
+                used_dimension_maps.add(name)
+                return dimension_map
+
         result = OrderedDict()
-        for dim in domain.dimensions + self._domain.dimensions:
+        for dim in domain.dimensions + self.domain.dimensions:
             # do not add dimension twice (if in source AND target)
             if dim in result:
                 continue
@@ -977,7 +1026,7 @@ class Variable(VariableBase, MixinNumpyMath):
             result[dim] = steps
 
             try:
-                source_level = self._domain.get_dimension_level(dim.name)
+                source_level = self.domain.get_dimension_level(dim.name)
                 expand = False
             except KeyError:
                 # new dimension => first step is to add (expand)
@@ -991,6 +1040,11 @@ class Variable(VariableBase, MixinNumpyMath):
                 # remove dimension => last step is to remove (squeeze)
                 target_level = dim
                 squeeze = True
+
+            dimension_map = get_dimension_map(source_level, target_level)
+            if dimension_map:
+                steps.append((source_level, target_level, "map", dimension_map))
+                continue  # no other steps
 
             if expand:
                 steps.append((None, dim, "expand", None))
@@ -1029,13 +1083,26 @@ class Variable(VariableBase, MixinNumpyMath):
             if squeeze:
                 steps.append((dim, None, "squeeze", None))
 
-            if not steps:
-                # no change: still add a dummy step (for visualization)
-                steps.append((source_level, source_level, "keep", None))
+        # check if all weights have been used
+        unused_level_weights = set(level_weights) - used_level_weights
+        if unused_level_weights:
+            raise ValueError(
+                "Weights not used for levels: %s" % str(unused_level_weights)
+            )
+
+        # check if all dimension maps have been used
+        unused_dimension_maps = set(dim_dimension_maps) - used_dimension_maps
+        if unused_dimension_maps:
+            raise ValueError(
+                "dimension maps not used for dimensions: %s"
+                % str(unused_dimension_maps)
+            )
 
         return result
 
-    def transform(self, domain, level_weights=None, on_group_0="error"):
+    def transform(
+        self, domain, level_weights=None, dimension_maps=None, on_group_0="error"
+    ):
         """Main function to map variable to a new domain.
 
         Args:
@@ -1043,6 +1110,8 @@ class Variable(VariableBase, MixinNumpyMath):
             level_weights(dict, optional):
                dimension level names -> one dimensional variables that will be used
                as weights for this level
+            dimension_maps(list, optional): list of MapVariables that will be used
+               to shortcut the regular disaggregation/aggregation path
             on_group_0(str, optional): how to handle group sums of 0: must be one of
 
                 * 'error': the default, raises an Error
@@ -1057,7 +1126,10 @@ class Variable(VariableBase, MixinNumpyMath):
 
         result = self
         dim_steps = self.get_transform_steps(
-            domain, level_weights=level_weights, on_group_0=on_group_0
+            domain,
+            level_weights=level_weights,
+            dimension_maps=dimension_maps,
+            on_group_0=on_group_0,
         )
         for dim, steps in dim_steps.items():
             dim_name = dim.name
@@ -1073,9 +1145,9 @@ class Variable(VariableBase, MixinNumpyMath):
                     result = result.disaggregate(
                         dim_name, to_level.name, weights=weight
                     )
-                elif action == "keep":
-                    # do nothing
-                    pass
+                elif action == "map":
+                    map_var = weight
+                    result = result.map(map_var)
                 else:
                     raise NotImplementedError(action)
 
@@ -1101,7 +1173,7 @@ class Variable(VariableBase, MixinNumpyMath):
 
     @property
     def is_scalar(self):
-        return self._domain.is_scalar
+        return self.domain.is_scalar
 
 
 class ExtensiveVariable(Variable):
@@ -1200,6 +1272,46 @@ class IntensiveScalar(IntensiveVariable):
 
     def __init__(self, value, unit=None):
         super().__init__(data=value, unit=unit, domain=[])
+
+
+class MapDomain(_DomainBase):
+    def __init__(self, dimension_levels):
+        dimension_level_from, dimension_level_to = dimension_levels
+        if not isinstance(dimension_level_from, DimensionLevel):
+            raise TypeError("dimension_level_from must be of type DimensionLevel")
+        if not isinstance(dimension_level_to, DimensionLevel):
+            raise TypeError("dimension_level_to must be of type DimensionLevel")
+        if not dimension_level_from.dimension == dimension_level_to.dimension:
+            raise TypeError(
+                "dimension_level_from and dimension_level_to must be in same dimension"
+            )
+
+        dimension_levels_dict = OrderedDict(
+            [("_from", dimension_level_from), ("_to", dimension_level_to)]
+        )
+
+        super().__init__(dimension_levels_dict)
+
+        self._dimension = dimension_level_from.dimension
+
+    @property
+    def dimension(self):
+        return self._dimension
+
+    @property
+    def dimension_level_from(self):
+        return self._dimension_levels["_from"]
+
+    @property
+    def dimension_level_to(self):
+        return self._dimension_levels["_to"]
+
+
+class MapVariable(_VariableBase):
+    def __init__(self, data, domain):
+        if not isinstance(domain, MapDomain):
+            domain = MapDomain(domain)
+        super().__init__(data, domain, vartype="map", unit=None)
 
 
 if __name__ == "__main__":

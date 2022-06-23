@@ -113,27 +113,28 @@ def draw_domain(variable, filetype="png", dpi=150):
     return draw_transform(steps, filetype=filetype, dpi=dpi)
 
 
-def draw_transform(dim_steps, filetype="png", dpi=150):
+def draw_transform(dim_steps, filetype="png", dpi=150, weight_names=None):
     """create image from variable transormation steps
     Args:
         dim_steps(OrderedDict): dimension -> steps
           * each element contains steps for a dimension
           * dimensions are all dimensions in source and target domain
           * each step is (from_level, to_level, action, (weight_level, weight_var))
-        filetype(str): "png" or "svg"
-        dpi(int): resolution for png image
+        filetype(str, optional): "png" or "svg"
+        dpi(int, optional): resolution for png image, defaults to 150
+        weight_names(dict, optional): str -> str mapping of weight level
+          to variable name that will be shown on edges
     """
     dot_cmd = get_dot_cmd(filetype=filetype, dpi=dpi)
-    dot_components = get_components(dim_steps)
+    dot_components = get_components(dim_steps, weight_names=weight_names)
     dot_str = get_dot_digraph_str(dot_components)
     image_bytes = get_image_bytes(dot_cmd, dot_str)
 
     return image_bytes
 
 
-def get_transform_path(steps):
-    # identify parts of subgraph that are part
-    # of the transformation path
+def get_transform_path(steps, weight_names=None):
+    """identify parts of subgraph that are part of the transformation path"""
 
     transform_path = {
         "edges_up": set(),
@@ -171,8 +172,15 @@ def get_transform_path(steps):
             raise NotImplementedError(action)
 
         if weight:
+            # determine weight name
+            weight_name = "<weight>"
+            if weight_names:
+                if action == "aggregate" and from_level.name in weight_names:
+                    weight_name = weight_names[from_level.name]
+                elif action == "disaggregate" and to_level.name in weight_names:
+                    weight_name = weight_names[to_level.name]
             key = (from_level, to_level)
-            transform_path["edges_weight"][key] = weight
+            transform_path["edges_weight"][key] = weight_name
 
     if transform_path["node_start"]:
         transform_path["nodes_path"].remove(transform_path["node_start"])
@@ -189,8 +197,7 @@ def iter_tree(node, parent=None):
         yield from iter_tree(child, parent=node)
 
 
-def get_components(dim_steps):
-
+def get_components(dim_steps, weight_names=None):
     # create node ids for for dot
     node_ids = {}
 
@@ -210,7 +217,7 @@ def get_components(dim_steps):
 
     # iterate over dimensions and create subgraphs
     for dim_idx, (dim, steps) in enumerate(dim_steps.items()):
-        transform_path = get_transform_path(steps)
+        transform_path = get_transform_path(steps, weight_names=weight_names)
 
         # start cluster for dimension
         dot_components.append("subgraph cluster_%d {" % dim_idx)
@@ -280,9 +287,9 @@ def get_edge_attrs(node, parent, transform_path):
         or edge_key_up in transform_path["edges_up"]
     ):
         edge_attr.update(STYLES["edge_up"])
-    weight = transform_path["edges_weight"].get(edge_key_down) or transform_path[
+    weight_name = transform_path["edges_weight"].get(edge_key_down) or transform_path[
         "edges_weight"
     ].get(edge_key_up)
-    if weight:
-        edge_attr.update({"xlabel": weight})
+    if weight_name:
+        edge_attr.update({"xlabel": weight_name})
     return edge_attr

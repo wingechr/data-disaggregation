@@ -4,6 +4,7 @@ for (dis)aggregation of data.
 
 import logging
 from collections import OrderedDict
+from enum import Enum
 from itertools import product
 
 import numpy as np
@@ -26,6 +27,14 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
+
+
+class Vartype(Enum):
+    INTENSIVE = 1
+    EXTENSIVE = 2
+    WEIGHT = 3
+    WEIGHT_W_NAN = 4
+    MAP = 5
 
 
 class DimensionLevel:
@@ -51,48 +60,52 @@ class DimensionLevel:
 
     """
 
+    __slots__ = [
+        "__name",
+        "__parent",
+        "__children",
+        "__levels",
+        "__group_matrix",
+        "__elements",
+    ]
+
     def __init__(self, parent, name, grouped_elements):
-        self._parent = parent
-        self._name = name
-        self._children = OrderedDict()
+        self.__name = name
+        self.__parent = parent
+        self.__children = OrderedDict()
+        self.__levels = {} if self.is_dimension_root else self.dimension.__levels
 
         # create/check elements
         if self.is_dimension_root:
             elements, group_sizes = tuple([None]), [1]
-            self._levels = {}
         else:
-            self._levels = self.dimension._levels  # only store once
             # register by name
-            if self.name in self._levels:
+            if self.name in self.__levels:
                 raise DuplicateNameError(
                     "Name for dimension level already used: %s" % self.name
                 )
-            elements, group_sizes = self._parse_grouped_elements(
-                self.parent, grouped_elements
+            elements, group_sizes = parent._parse_child_grouped_elements(
+                grouped_elements
             )
 
-        self._group_matrix = create_group_matrix(group_sizes)
-        self._elements = elements
-        self._size = len(self.elements)
-        self._indices = tuple(range(self.size))
-        self._element2index = dict(zip(self.elements, self._indices))
+        self.__group_matrix = create_group_matrix(group_sizes)
+        self.__elements = tuple(elements)
 
         # register/link name
-        self._levels[self.name] = self
+        self.__levels[self.name] = self
         # register as child
         if not self.is_dimension_root:
-            self.parent._children[self.name] = self
+            self.parent.__children[self.name] = self
 
     def __str__(self):
         return "/".join(self.path)
 
-    @staticmethod
-    def _parse_grouped_elements(parent, grouped_elements):
+    def _parse_child_grouped_elements(self, grouped_elements):
         """
         only used in __init__
         """
         # convert grouped_elements into dict
-        if parent.is_dimension_root:  # parent is root
+        if self.is_dimension_root:  # parent is root
             if isinstance(grouped_elements, (list, tuple)):
                 grouped_elements = {None: grouped_elements}
             elif pd and isinstance(grouped_elements, pd.Series):
@@ -112,7 +125,7 @@ class DimensionLevel:
                 """
             )
 
-        parent_elements = parent.elements
+        parent_elements = self.elements
         set_parent_elements = set(parent_elements)
         set_grouped_elements = set(grouped_elements)
         if set_grouped_elements - set_parent_elements:
@@ -129,6 +142,7 @@ class DimensionLevel:
         elements = []
         group_sizes = []
         set_elements = set()
+
         # IMPORTANT: group order defined by parent!
         for p in parent_elements:
             elems = grouped_elements[p]
@@ -163,20 +177,20 @@ class DimensionLevel:
 
     def get_level(self, name):
         """get level by name (anywhere in the dimension)"""
-        return self._levels[name]
+        return self.__levels[name]
 
     def get_child(self, name):
         """get child level by name"""
-        return self._children[name]
+        return self.__children[name]
 
     @property
     def children(self):
-        return OrderedDict(self._children)
+        return OrderedDict(self.__children)
 
     @property
     def group_matrix(self):
         """2 dimensional numpy matrix to group elements to the parent level"""
-        return self._group_matrix.copy()
+        return self.__group_matrix.copy()
 
     @property
     def is_dimension_root(self):
@@ -186,7 +200,7 @@ class DimensionLevel:
     @property
     def parent(self):
         """parent level"""
-        return self._parent
+        return self.__parent
 
     @property
     def dimension_name(self):
@@ -196,17 +210,17 @@ class DimensionLevel:
     @property
     def name(self):
         """name of the level"""
-        return self._name
+        return self.__name
 
     @property
     def elements(self):
         """list of elements"""
-        return self._elements
+        return self.__elements
 
     @property
     def size(self):
         """number of elements"""
-        return self._size
+        return len(self.elements)
 
     @property
     def dimension(self):
@@ -221,6 +235,10 @@ class DimensionLevel:
         else:
             return self.parent.path + [self.name]
 
+    @property
+    def indices(self):
+        return tuple(range(self.size))
+
 
 class Dimension(DimensionLevel):
     """Dimension root level
@@ -234,16 +252,21 @@ class Dimension(DimensionLevel):
 
 
 class _DomainBase:
+    __slots__ = ["__dimension_levels"]
+
     def __init__(self, dimension_levels_dict):
-        self._dimension_levels = dimension_levels_dict
-        self._size = len(self.dimension_levels)
-        self._shape = tuple(d.size for d in self.dimension_levels)
-        self._keys = tuple(product(*[d.elements for d in self.dimension_levels]))
-        self._indices = tuple(product(*[d._indices for d in self.dimension_levels]))
-        self._key2index = dict(zip(self._keys, self._indices))
+        self.__dimension_levels = OrderedDict(dimension_levels_dict)
+
+    def get_dimension_level(self, dimension_name):
+        """get current level of dimension
+
+        Args:
+            dimension_name(str)
+        """
+        return self.__dimension_levels[dimension_name]
 
     def __eq__(self, other):
-        return self._size == other._size and all(
+        return self.size == other.size and all(
             d1 == d2 for d1, d2 in zip(self.dimension_levels, other.dimension_levels)
         )
 
@@ -253,13 +276,15 @@ class _DomainBase:
         Args:
             data(dict)
         """
+
+        key2index = dict(zip(self.keys, self.indices))
         d_matrix = np.zeros(shape=self.shape)
         for key, val in data.items():
             # TODO: create new function?
             # fix for 1-dim
             if not isinstance(key, tuple):
                 key = (key,)
-            idx = self._key2index[key]
+            idx = key2index[key]
             d_matrix[idx] = val
         return d_matrix
 
@@ -281,23 +306,31 @@ class _DomainBase:
 
     @property
     def dimension_levels(self):
-        return tuple(self._dimension_levels.values())
+        return tuple(self.__dimension_levels.values())
 
     @property
     def dimension_level_names(self):
-        return tuple(d.name for d in self.dimension_levels)
+        return tuple(d.name for d in self.__dimension_levels.values())
 
     @property
     def size(self):
-        return self._size
+        return len(self.dimension_levels)
 
     @property
     def shape(self):
-        return self._shape
+        return tuple(d.size for d in self.dimension_levels)
 
     @property
     def is_scalar(self):
         return self.size == 0
+
+    @property
+    def keys(self):
+        return tuple(product(*[d.elements for d in self.dimension_levels]))
+
+    @property
+    def indices(self):
+        return tuple(product(*[d.indices for d in self.dimension_levels]))
 
 
 class Domain(_DomainBase):
@@ -331,10 +364,6 @@ class Domain(_DomainBase):
 
         super().__init__(dimension_levels_dict)
 
-        self._dimension_name2index = dict(
-            (n, i) for i, n in enumerate(self.dimension_names)
-        )
-
     def __str__(self):
         dims = self._dimension_levels.items()
         dims_str = ", ".join("%s=%s(%d)" % (n, d, d.size) for n, d in dims)
@@ -354,7 +383,7 @@ class Domain(_DomainBase):
         Args:
             dimension_name(str): name of dimension
         """
-        return self._dimension_name2index[dimension_name]
+        return self.dimension_names.index(dimension_name)
 
     def get_dimension(self, dimension_name):
         """get dimension object by name
@@ -372,28 +401,23 @@ class Domain(_DomainBase):
         """
         return dimension_name in self._dimension_levels
 
-    def get_dimension_level(self, dimension_name):
-        """get current level of dimension
-
-        Args:
-            dimension_name(str)
-        """
-        return self._dimension_levels[dimension_name]
-
 
 class _VariableBase:
-    def __init__(self, data, domain, vartype, unit=None):
-        self._unit = unit
+    __slots__ = [
+        "__unit",
+        "__vartype",
+        "__domain",
+        "_data_matrix",
+    ]
 
-        if vartype not in ("intensive", "extensive", "weight", "weight_w_nan", "map"):
-            raise ValueError(
-                "vartype not in ('intensive', 'extensive', 'weight_w_nan')", "map"
-            )
-        self._vartype = vartype
+    def __init__(self, data, domain, vartype, unit=None):
+        self.__unit = unit
+
+        self.__vartype = Vartype(vartype)
 
         if not isinstance(domain, _DomainBase):
             raise TypeError("Wrong type for Domain")
-        self._domain = domain
+        self.__domain = domain
 
         # set data
         if isinstance(data, dict):
@@ -450,7 +474,7 @@ class _VariableBase:
                 keys are not tuples, but just values
         """
         res = {}
-        for idx, key in zip(self.domain._indices, self.domain._keys):
+        for idx, key in zip(self.domain.indices, self.domain.keys):
             val = self._data_matrix[idx]
             if val or not skip_0:
                 if keys_flat_1d and self.domain.size == 1:
@@ -476,16 +500,41 @@ class _VariableBase:
 
     @property
     def domain(self):
-        return self._domain
+        return self.__domain
+
+    @property
+    def unit(self):
+        return self.__unit
+
+    @property
+    def vartype(self):
+        return self.__vartype
+
+    @property
+    def is_intensive(self):
+        return self.__vartype == Vartype.INTENSIVE
+
+    @property
+    def is_extensive(self):
+        return self.__vartype == Vartype.EXTENSIVE
+
+    @property
+    def is_weight(self):
+        return self.__vartype in (Vartype.WEIGHT, Vartype.WEIGHT_W_NAN)
+
+    @property
+    def is_weight_w_nan(self):
+        """A weight where group sums can also be nan (partially defined)"""
+        return self.__vartype == Vartype.WEIGHT_W_NAN
 
 
 class MixinNumpyMath:
     """delegate math operations to numpy"""
 
     def _get_unit_add(self, other):
-        unit = self._unit
+        unit = self.unit
         if isinstance(other, _VariableBase):
-            other_unit = other._unit
+            other_unit = other.unit
         else:
             other_unit = unit
         if unit != other_unit:
@@ -493,9 +542,9 @@ class MixinNumpyMath:
         return unit
 
     def _get_unit_mult(self, other):
-        unit = self._unit
+        unit = self.unit
         if isinstance(other, _VariableBase):
-            other_unit = other._unit
+            other_unit = other.unit
         else:
             other_unit = unit
         if unit or other_unit:
@@ -503,9 +552,9 @@ class MixinNumpyMath:
         return unit
 
     def _get_unit_div(self, other):
-        unit = self._unit
+        unit = self.unit
         if isinstance(other, _VariableBase):
-            other_unit = other._unit
+            other_unit = other.unit
         else:
             other_unit = unit
         if unit or other_unit:
@@ -513,9 +562,9 @@ class MixinNumpyMath:
         return unit
 
     def _get_unit_rdiv(self, other):
-        unit = self._unit
+        unit = self.unit
         if isinstance(other, _VariableBase):
-            other_unit = other._unit
+            other_unit = other.unit
         else:
             other_unit = unit
         if unit or other_unit:
@@ -523,14 +572,14 @@ class MixinNumpyMath:
         return unit
 
     def _get_vartype(self, other):
-        vartype = self._vartype
+        vartype = self.vartype
         if isinstance(other, _VariableBase):
-            other_vartype = other._vartype
+            other_vartype = other.vartype
         else:
             other_vartype = vartype
         if vartype != other_vartype:
             raise ArithmeticError("vartype mismatch")
-        if vartype != "extensive":
+        if not self.is_extensive:
             raise ArithmeticError("invalid vartype for operation: %s" % vartype)
         return vartype
 
@@ -608,11 +657,11 @@ class MixinNumpyMath:
     # unary methods
     def __neg__(self):
         data = -self._data_matrix
-        return Variable(data, self.domain, self._vartype, unit=self._unit)
+        return Variable(data, self.domain, self.vartype, unit=self.unit)
 
     def fillna(self, value=0):
         data = np.nan_to_num(self._data_matrix, nan=value)
-        return Variable(data, self.domain, self._vartype, unit=self._unit)
+        return Variable(data, self.domain, self.vartype, unit=self.unit)
 
 
 class Variable(_VariableBase, MixinNumpyMath):
@@ -659,14 +708,15 @@ class Variable(_VariableBase, MixinNumpyMath):
                 raise DimensionStructureError("Weights must have exactly one dimension")
 
             # check values
-            if np.any(self._data_matrix < 0):
+            data_matrix = self._data_matrix
+            if np.any(data_matrix < 0):
                 raise ValueError("all values must be >= 0")
-            if np.any(np.isnan(self._data_matrix)) and not self.is_weight_w_nan:
+            if np.any(np.isnan(data_matrix)) and not self.is_weight_w_nan:
                 raise ValueError("all values must be >= 0")
 
             group_matrix = self.domain.dimension_levels[0].group_matrix
             # create sum for groups. shapes: (m, n) * (n,) = (m,)
-            sums = group_matrix.transpose().dot(self._data_matrix)
+            sums = group_matrix.transpose().dot(data_matrix)
             shape = (group_matrix.shape[1],)
             if not np.allclose(np.ones(shape), sums):
                 if self.is_weight_w_nan:
@@ -698,9 +748,9 @@ class Variable(_VariableBase, MixinNumpyMath):
 
         # is_intensive=None ==> weights
 
-        vartype = "weight"
+        vartype = Vartype.WEIGHT
         if np.any(np.isnan(data)) and on_group_0 == "nan":
-            vartype = "weight_w_nan"
+            vartype = Vartype.WEIGHT_W_NAN
 
         return Variable(
             domain=self.domain,
@@ -789,8 +839,8 @@ class Variable(_VariableBase, MixinNumpyMath):
         return Variable(
             domain=new_domain,
             data=data_matrix,
-            unit=self._unit,
-            vartype=self._vartype,
+            unit=self.unit,
+            vartype=self.vartype,
         )
 
     def disaggregate(self, dimension_name, dimension_level_name, weights=None):
@@ -827,7 +877,7 @@ class Variable(_VariableBase, MixinNumpyMath):
         logging.debug(
             "disaggregate %s (%s) => %s",
             dimension_level,
-            self._vartype,
+            self.vartype,
             new_dimension_level,
         )
 
@@ -902,8 +952,8 @@ class Variable(_VariableBase, MixinNumpyMath):
         return Variable(
             domain=domain,
             data=data_matrix,
-            unit=self._unit,
-            vartype=self._vartype,
+            unit=self.unit,
+            vartype=self.vartype,
         )
 
     def squeeze(self, dimension_name):
@@ -930,8 +980,8 @@ class Variable(_VariableBase, MixinNumpyMath):
         return Variable(
             domain=domain,
             data=data_matrix,
-            unit=self._unit,
-            vartype=self._vartype,
+            unit=self.unit,
+            vartype=self.vartype,
         )
 
     def reorder(self, dimension_names):
@@ -952,8 +1002,8 @@ class Variable(_VariableBase, MixinNumpyMath):
         return Variable(
             domain=domain,
             data=data_matrix,
-            unit=self._unit,
-            vartype=self._vartype,
+            unit=self.unit,
+            vartype=self.vartype,
         )
 
     def get_transform_steps(
@@ -1155,23 +1205,6 @@ class Variable(_VariableBase, MixinNumpyMath):
         return result
 
     @property
-    def is_intensive(self):
-        return self._vartype == "intensive"
-
-    @property
-    def is_extensive(self):
-        return self._vartype == "extensive"
-
-    @property
-    def is_weight(self):
-        return self._vartype in ("weight", "weight_w_nan")
-
-    @property
-    def is_weight_w_nan(self):
-        """A weight where group sums can also be nan (partially defined)"""
-        return self._vartype == "weight_w_nan"
-
-    @property
     def is_scalar(self):
         return self.domain.is_scalar
 
@@ -1195,7 +1228,7 @@ class ExtensiveVariable(Variable):
     """
 
     def __init__(self, data, domain, unit=None):
-        super().__init__(data=data, unit=unit, domain=domain, vartype="extensive")
+        super().__init__(data=data, unit=unit, domain=domain, vartype=Vartype.EXTENSIVE)
 
 
 class IntensiveVariable(Variable):
@@ -1217,7 +1250,7 @@ class IntensiveVariable(Variable):
     """
 
     def __init__(self, data, domain, unit=None):
-        super().__init__(data=data, unit=unit, domain=domain, vartype="intensive")
+        super().__init__(data=data, unit=unit, domain=domain, vartype=Vartype.INTENSIVE)
 
 
 class Weight(Variable):
@@ -1244,7 +1277,7 @@ class Weight(Variable):
 
     def __init__(self, data, dimension_level):
         super().__init__(
-            data=data, unit=None, domain=[dimension_level], vartype="weight"
+            data=data, unit=None, domain=[dimension_level], vartype=Vartype.WEIGHT
         )
 
 
@@ -1275,6 +1308,10 @@ class IntensiveScalar(IntensiveVariable):
 
 
 class MapDomain(_DomainBase):
+
+    __key_from = "_from"
+    __key_to = "_to"
+
     def __init__(self, dimension_levels):
         dimension_level_from, dimension_level_to = dimension_levels
         if not isinstance(dimension_level_from, DimensionLevel):
@@ -1287,31 +1324,36 @@ class MapDomain(_DomainBase):
             )
 
         dimension_levels_dict = OrderedDict(
-            [("_from", dimension_level_from), ("_to", dimension_level_to)]
+            [
+                (self.__key_from, dimension_level_from),
+                (self.__key_to, dimension_level_to),
+            ]
         )
 
         super().__init__(dimension_levels_dict)
 
-        self._dimension = dimension_level_from.dimension
-
     @property
     def dimension(self):
-        return self._dimension
+        return self.dimension_level_from.dimension
 
     @property
     def dimension_level_from(self):
-        return self._dimension_levels["_from"]
+        return self.get_dimension_level(self.__key_from)
 
     @property
     def dimension_level_to(self):
-        return self._dimension_levels["_to"]
+        return self.get_dimension_level(self.__key_to)
+
+
+class Transform(MapDomain):
+    pass
 
 
 class MapVariable(_VariableBase):
     def __init__(self, data, domain):
         if not isinstance(domain, MapDomain):
             domain = MapDomain(domain)
-        super().__init__(data, domain, vartype="map", unit=None)
+        super().__init__(data, domain, vartype=Vartype.MAP, unit=None)
 
 
 if __name__ == "__main__":

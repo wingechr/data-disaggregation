@@ -63,7 +63,7 @@ class TestClasses(unittest.TestCase):
         dom = Domain([d1a, d2a])
         # get keys
         self.assertEqual(
-            tuple(dom._keys),
+            tuple(dom.keys),
             (("d11", "d21"), ("d11", "d22"), ("d12", "d21"), ("d12", "d22")),
         )
 

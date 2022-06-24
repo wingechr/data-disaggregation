@@ -30,7 +30,7 @@ subregion = region.add_level(
 )
 
 # create extensive variable
-v1 = Variable(
+v1 = ExtensiveVariable(
     data={
         (1, "sr1_1"): 2,
         (1, "sr1_2"): 3,
@@ -38,7 +38,6 @@ v1 = Variable(
         (2, "sr2_1"): 5,
     },
     domain=[hour, subregion],
-    vartype="extensive",
 )
 
 # transform (aggregate) fo target dimension

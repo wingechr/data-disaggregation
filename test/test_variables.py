@@ -10,7 +10,6 @@ from data_disaggregation.classes import (
     ExtensiveVariable,
     IntensiveScalar,
     MapVariable,
-    Variable,
     Weight,
 )
 from data_disaggregation.draw import draw_transform
@@ -39,7 +38,7 @@ class TestVariable(unittest.TestCase):
         )
 
     def test_transform1(self):
-        v1 = Variable(
+        v1 = ExtensiveVariable(
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,
@@ -47,7 +46,6 @@ class TestVariable(unittest.TestCase):
                 (2, "sr2_1"): 5,
             },
             domain=[self.year_hour, self.subregion],
-            vartype="extensive",
         )
         v2 = v1.transform(domain=[self.region])
         assert_array_equal(v2._data_matrix, [9, 5])
@@ -57,10 +55,8 @@ class TestVariable(unittest.TestCase):
         self.assertAlmostEqual(v1sum, v2sum)
 
     def test_extensive(self):
-        v1 = Variable(
-            data={1: 10, 2: 20, 3: 30, 4: 40, 5: 50},
-            domain=self.year_hour,
-            vartype="extensive",
+        v1 = ExtensiveVariable(
+            data={1: 10, 2: 20, 3: 30, 4: 40, 5: 50}, domain=self.year_hour
         )
         v2 = v1.transform(self.time)  # should work
 
@@ -115,7 +111,7 @@ class TestVariable(unittest.TestCase):
         self.assertRaises(ValueError, res)
 
     def test_transform_steps(self):
-        v1 = Variable(
+        v1 = ExtensiveVariable(
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,
@@ -123,7 +119,6 @@ class TestVariable(unittest.TestCase):
                 (2, "sr2_1"): 5,
             },
             domain=[self.year_hour, self.subregion],
-            vartype="extensive",
         )
         steps_dct = v1.get_transform_steps(domain=[self.region])
 
@@ -158,11 +153,7 @@ class TestVariable(unittest.TestCase):
         )
 
     def test_to_series(self):
-        v1 = Variable(
-            data={1: 10},
-            domain=self.year_hour,
-            vartype="extensive",
-        )
+        v1 = ExtensiveVariable(data={1: 10}, domain=self.year_hour)
         try:
             series = v1.to_series()
         except ImportError:
@@ -170,7 +161,7 @@ class TestVariable(unittest.TestCase):
         self.assertEqual(10, int(series[1]))
 
     def test_draw_get_image_bytes(self):
-        v1 = Variable(
+        v1 = ExtensiveVariable(
             data={
                 (1, "sr1_1"): 2,
                 (1, "sr1_2"): 3,
@@ -178,7 +169,6 @@ class TestVariable(unittest.TestCase):
                 (2, "sr2_1"): 5,
             },
             domain=[self.year_hour, self.subregion],
-            vartype="extensive",
         )
         steps = v1.get_transform_steps(domain=[self.region])
         try:

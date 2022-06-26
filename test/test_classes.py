@@ -1,76 +1,93 @@
 import unittest
 from functools import partial
 
-from data_disaggregation.classes import Dimension, Domain
-from data_disaggregation.exceptions import DimensionStructureError, DuplicateNameError
+import pandas as pd
 
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
+from data_disaggregation.classes import (
+    BoolVariable,
+    Dimension,
+    DimensionLevel,
+    Domain,
+    FrozenMap,
+    Variable,
+)
 
 
-class TestClasses(unittest.TestCase):
-    def test_dimension(self):
-        # dimensions can have same name (although, why?)
-        d = Dimension(name="D")
-        Dimension(name="D")
+class TestFrozenMap(unittest.TestCase):
+    """immutable, ordered map of unique hashables mapping to variables of a type"""
 
-        # dimension levels must be unique in a dimension
-        res = partial(d.add_level, name="D", grouped_elements=["d1", "d2"])
-        self.assertRaises(DuplicateNameError, res)
+    def test_frozenmap(self):
+        # wrong value type
+        self.assertRaises(TypeError, partial(FrozenMap, [(1, "val")], int))
 
-        # elements must be grouped ...
-        d1a = d.add_level(name="D1a", grouped_elements={None: ["d1", "d2"]})
-        # ... in first level: can also just be a group
-        d.add_level(name="D1b", grouped_elements=["d1", "d2"])
-        if pd:
-            d.add_level(name="D1c", grouped_elements=pd.Series(["d1", "d2"]))
+        # unique
+        self.assertRaises(KeyError, partial(FrozenMap, [(1, 1), (1, 1)], int))
 
-        # elements must be unique and hashable
-        res = partial(d.add_level, name="D1", grouped_elements=["d1", "d1"])
-        self.assertRaises(DuplicateNameError, res)
-        res = partial(d.add_level, name="D1", grouped_elements=[["d1"]])
-        self.assertRaises(TypeError, res)
+        # hashable keys
+        self.assertRaises(TypeError, partial(FrozenMap, [([1], 1)], int))
 
-        # all parents must have at least one child
-        d2a = d1a.add_level(
-            name="D2a", grouped_elements={"d1": ["d11", "d12"], "d2": ["d21"]}
-        )
+        fm = FrozenMap([(1, 1), (2, 1)], int)
+        fm[1]  # access works
 
-        res = partial(
-            d1a.add_level, name="D2b", grouped_elements={"d1": ["d11"], "d2": []}
-        )
-        self.assertRaises(DimensionStructureError, res)
-        res = partial(d1a.add_level, name="D2b", grouped_elements={"d1": ["d11"]})
-        self.assertRaises(DimensionStructureError, res)
-        res = partial(d1a.add_level, name="D2b", grouped_elements={"d3": ["d31"]})
-        self.assertRaises(DimensionStructureError, res)
+        # immutable
+        def modify():
+            fm[1] = 1
 
-        # check path
-        self.assertEqual(tuple(d2a.path), ("D", "D1a", "D2a"))
+        self.assertRaises(TypeError, modify)
 
-    def test_domain(self):
-        # cannot duplicate dimensions
-        d1 = Dimension(name="D1")
-        d2 = Dimension(name="D2")
-        d1a = d1.add_level(name="D1a", grouped_elements=["d11", "d12"])
-        d2a = d2.add_level(name="D2a", grouped_elements=["d21", "d22"])
 
-        res = partial(Domain, [d1, d1a])
-        self.assertRaises(DuplicateNameError, res)
+class TestDimensionLevel(unittest.TestCase):
+    """wrapper around FrozenMap of elements"""
 
-        dom = Domain([d1a, d2a])
-        # get keys
+    @classmethod
+    def setUpClass(cls):
+        cls.dim1 = Dimension("dim1")
+        cls.dim1_lev1 = DimensionLevel("dim1_lev1", cls.dim1, ["a", "b"])
+        cls.dim1_lev2 = DimensionLevel("dim1_lev2", cls.dim1, ["X", "Y", "Z"])
+
+    def test_uniquenames(self):
+        self.assertRaises(KeyError, partial(DimensionLevel, "dim1", self.dim1, []))
+
+    def test_dimensionlevel(self):
+        # wrong value type
+        self.assertEqual(self.dim1_lev1.size, 2)
+        self.assertEqual(tuple(self.dim1_lev1.keys()), ("a", "b"))
+
+    def test_domain_scalar(self):
+        sd = Domain([])
+        self.assertEqual(sd.size, 0)
+        self.assertEqual(sd.shape, ())
+        self.assertEqual(tuple(sd.indices.keys()), ())
+        _v = Variable(10, sd, None)  # noqa
+
+    def test_domain_linear(self):
+        sd = Domain(self.dim1_lev1)
+        self.assertEqual(sd.size, 1)
+        self.assertEqual(sd.shape, (2,))
         self.assertEqual(
-            tuple(dom._keys),
-            (("d11", "d21"), ("d11", "d22"), ("d12", "d21"), ("d12", "d22")),
-        )
+            tuple(sd.indices.keys()), ("a", "b")
+        )  # keys are not tuples but values
+        data = {"a": 1, "b": 2}
+        _v = Variable(data, sd, None)  # noqa
+        _v = Variable(pd.Series(data), sd, None)  # noqa
 
-    def test_parse_grouped_elements(self):
-        d1 = Dimension(name="D1")
-        d1a = d1.add_level(name="D1a", grouped_elements=["d11", "d12"])
-        d1b = d1a.add_level(
-            name="D1b", grouped_elements={"d12": [3, 4, 5], "d11": [1, 2]}
+    def test_domain_multi(self):
+        sd = Domain([self.dim1_lev1, self.dim1_lev2])
+        self.assertEqual(sd.size, 2)
+        self.assertEqual(sd.shape, (2, 3))
+        self.assertEqual(
+            tuple(sd.indices.keys()),
+            (("a", "X"), ("a", "Y"), ("a", "Z"), ("b", "X"), ("b", "Y"), ("b", "Z")),
         )
-        self.assertEqual(d1b.elements, (1, 2, 3, 4, 5))
+        data = [
+            {"d1": "a", "d2": "X", "v": 1},
+            {"d1": "a", "d2": "Y", "v": 2},
+            {"d1": "b", "d2": "Z", "v": 3},
+        ]
+        series = pd.DataFrame(data).set_index(["d1", "d2"])["v"]
+        dct = dict(series.items())
+        _v = Variable(dct, sd, None)  # noqa
+        _v = Variable(series, sd, None)  # noqa
+
+    def test_boolvar(self):
+        _v = BoolVariable(-2, None, None)  # noqa

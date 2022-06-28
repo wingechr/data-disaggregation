@@ -4,7 +4,6 @@ from functools import partial
 import pandas as pd
 
 from data_disaggregation.classes import (
-    BoolVariable,
     Dimension,
     DimensionLevel,
     Domain,
@@ -41,12 +40,12 @@ class TestDimensionLevel(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.dim1 = Dimension("dim1")
-        cls.dim1_lev1 = DimensionLevel("dim1_lev1", cls.dim1, ["a", "b"])
-        cls.dim1_lev2 = DimensionLevel("dim1_lev2", cls.dim1, ["X", "Y", "Z"])
+        cls.dim1 = Dimension("d1")
+        cls.dim1_lev1 = DimensionLevel("dl1", cls.dim1, ["a", "b"])
+        cls.dim1_lev2 = DimensionLevel("dl2", cls.dim1, ["X", "Y", "Z"])
 
     def test_uniquenames(self):
-        self.assertRaises(KeyError, partial(DimensionLevel, "dim1", self.dim1, []))
+        self.assertRaises(KeyError, partial(DimensionLevel, "d1", self.dim1, []))
 
     def test_dimensionlevel(self):
         # wrong value type
@@ -72,7 +71,7 @@ class TestDimensionLevel(unittest.TestCase):
         _v = Variable(pd.Series(data), sd, None)  # noqa
 
     def test_domain_multi(self):
-        sd = Domain([self.dim1_lev1, self.dim1_lev2])
+        sd = Domain([self.dim1_lev1, self.dim1_lev2.alias("d1b")])
         self.assertEqual(sd.size, 2)
         self.assertEqual(sd.shape, (2, 3))
         self.assertEqual(
@@ -89,5 +88,26 @@ class TestDimensionLevel(unittest.TestCase):
         _v = Variable(dct, sd, None)  # noqa
         _v = Variable(series, sd, None)  # noqa
 
-    def test_boolvar(self):
-        _v = BoolVariable(-2, None, None)  # noqa
+    def test_equality(self):
+        self.assertEqual(
+            Domain([self.dim1_lev1, self.dim1_lev2.alias("d1b")]),
+            Domain([self.dim1_lev1.alias("d1b"), self.dim1_lev2]),
+        )
+
+    def test_transpose(self):
+        dom = [self.dim1_lev1, self.dim1_lev1.alias("d1b")]
+        v = Variable({("a", "a"): 1, ("a", "b"): 2, ("b", "a"): 3}, dom, None)
+        self.assertRaises(KeyError, partial(v.transpose, ["x"]))
+        vt = v.transpose(["d1b", "d1"])
+        data = dict(kv for kv in vt.items() if kv[1])
+        self.assertDictEqual(data, {("a", "a"): 1, ("a", "b"): 3, ("b", "a"): 2})
+
+    def test_dom_insert_squeeze(self):
+        v = Variable({}, self.dim1_lev1, None)
+        v = v.expand(self.dim1.alias("d1b"))
+        self.assertEqual(tuple(v.domain.keys()), ("d1", "d1b"))
+        v = v.transpose(("d1b", "d1"))
+        self.assertRaises(Exception, partial(v.squeeze))
+        v = v.transpose(("d1", "d1b"))
+        v = v.squeeze()
+        self.assertEqual(tuple(v.domain.keys()), ("d1",))

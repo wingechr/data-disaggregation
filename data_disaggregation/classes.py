@@ -1,40 +1,57 @@
-from collections import OrderedDict
+import logging  # noqa
 from itertools import product
 
 import numpy as np
+
+DIMENSION_ROOT_ELEMENT = None
 
 
 class FrozenMap:
     """immutable, ordered map of unique hashables mapping to variables of a type"""
 
-    __slots__ = ["__data"]
+    __slots__ = ["__values", "__indices", "__keys"]
 
     def __init__(self, items, value_class):
-        self.__data = OrderedDict()  # immutable: only change in __init__
-        for key, val in items:
+
+        self.__indices = {}  # key -> idx
+
+        keys = []
+        values = []
+
+        for idx, (key, val) in enumerate(items):
             if not isinstance(val, value_class):  # ensure type of values
                 raise TypeError(f"{val} is not of type {value_class}")
-            if key in self.__data:  # ensure uniqueness
+            if key in self.__indices:  # ensure uniqueness
                 raise KeyError(f"{key} not unique")
-            self.__data[key] = val  # ensure hashable
+            self.__indices[key] = idx
+            keys.append(key)
+            values.append(val)
+
+        self.__keys = tuple(keys)
+        self.__values = tuple(values)
 
     def __len__(self):
-        return len(self.__data)
+        return len(self.__keys)
 
     def __getitem__(self, key):
-        return self.__data[key]
+        idx = self.__indices[key]
+        return self.__values[idx]
 
     def __contains__(self, key):
-        return key in self.__data
+        return key in self.__indices
 
     def keys(self):
-        return self.__data.keys()
+        # return self.__data.keys()
+        return self.__keys
 
     def values(self):
-        return self.__data.values()
+        return self.__values
 
     def items(self):
-        return self.__data.items()
+        return zip(self.__keys, self.__values)
+
+    def index(self, key):
+        return self.__indices[key]
 
 
 class UniquelyNamedFrozenMap(FrozenMap):
@@ -55,6 +72,9 @@ class UniquelyNamedFrozenMap(FrozenMap):
     def name(self):
         return self.__name
 
+    def __str__(self):
+        return f"{self.__class__.__name__}({self.name})"
+
 
 class DimensionLevel(UniquelyNamedFrozenMap):
     __slots__ = ["__dimension"]
@@ -68,9 +88,6 @@ class DimensionLevel(UniquelyNamedFrozenMap):
             raise TypeError(f"{dimension} is not of type Dimension")
         self.__dimension = dimension
 
-        # register
-        # self.dimension.add_dimension_level(self)
-
     @property
     def dimension(self):
         return self.__dimension
@@ -79,16 +96,31 @@ class DimensionLevel(UniquelyNamedFrozenMap):
     def size(self):
         return len(self)
 
-    # def add_dimension_level(self, dimension_level):
-    #    if not isinstance(dimension_level, DimensionLevel):
-    #        raise TypeError(f"{dimension_level} is not of type DimensionLevel")
+    def alias(self, name):
+        return Alias(name, self)
 
 
 class Dimension(DimensionLevel):
     pass
 
     def __init__(self, name):
-        super().__init__(name=name, dimension=self, elements=[])
+        super().__init__(name=name, dimension=self, elements=[DIMENSION_ROOT_ELEMENT])
+
+
+class Alias:
+    __slots__ = ["__name", "__reference"]
+
+    def __init__(self, name, reference):
+        self.__name = name
+        self.__reference = reference
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def reference(self):
+        return self.__reference
 
 
 def parse_dimension_levels(dimension_levels):
@@ -97,11 +129,15 @@ def parse_dimension_levels(dimension_levels):
         dimension_levels = [dimension_levels]
     elif dimension_levels is None:  # scalar
         dimension_levels = []
+    elif isinstance(dimension_levels, dict):
+        dimension_levels = dimension_levels.items()
     for x in dimension_levels:
-        if isinstance(x, DimensionLevel):
-            yield x.name, x
-        else:  # assume it's a dictionary
-            yield x, dimension_levels[x]
+        if isinstance(x, Alias):
+            yield x.name, x.reference
+        elif isinstance(x, DimensionLevel):
+            yield x.dimension.name, x
+        else:
+            yield x
 
 
 class Domain(FrozenMap):
@@ -124,6 +160,12 @@ class Domain(FrozenMap):
                 ),
                 tuple,
             )
+
+    def __eq__(self, other):
+        return tuple(self.values()) == tuple(other.values())
+
+    def __str__(self):
+        return f"Domain({list(self.keys())})"
 
     @property
     def shape(self):
@@ -148,6 +190,48 @@ class Domain(FrozenMap):
         else:
             return Domain(x)
 
+    def transpose(self, dimension_names):
+        assertEqual(dimension_names, self.keys())
+        dimension_levels = [(n, self[n]) for n in dimension_names]
+        return Domain(dimension_levels)
+
+    def squeeze(self):
+        if not self.size:
+            raise Exception("can not squeeze scalar")
+        last_dimension_level = self.values()[self.size - 1]
+        if not isinstance(last_dimension_level, Dimension):
+            raise Exception("can only remove last dimension if fully aggregated")
+        dimension_levels = list(self.items())
+        return Domain(dimension_levels[:-1])
+
+    def expand(self, dimension):
+        if not (
+            isinstance(dimension, Dimension)
+            or (
+                isinstance(dimension, Alias),
+                isinstance(dimension.reference, Dimension),
+            )
+        ):
+            raise Exception("can only add root level dimension")
+        dimension_levels = list(self.items())
+        dimension_levels.append(dimension)
+        return Domain(dimension_levels)
+
+
+def assertEqual(items1, items2):
+    list1 = list(items1)
+    list2 = list(items2)
+    set1 = set(list1)
+    set2 = set(list2)
+    if len(set1) != len(list1):
+        raise KeyError(f"Duplicate elements in first list: {list1}")
+    if len(set2) != len(list2):
+        raise KeyError(f"Duplicate elements in second list: {list2}")
+    if set2 - set1:
+        raise KeyError(f"Missing elements in first list: {set2 - set1}")
+    if set1 - set2:
+        raise KeyError(f"Missing elements in second list: {set1 - set2}")
+
 
 class VarType:
     __slots__ = []
@@ -157,7 +241,10 @@ class VarType:
         if isinstance(x, VarType):
             return x
         else:
-            return Domain(x)
+            return VarType(x)
+
+    def __init__(self, *arg, **kwargs):
+        pass
 
 
 class Variable:
@@ -173,13 +260,16 @@ class Variable:
         self.__vartype = VarType.as_vartype(vartype)
         self.__data = self.__parse_data(data)
 
+    def __str__(self):
+        return f"Variable({self.domain})"
+
     def __parse_data(self, data):
         if isinstance(data, np.ndarray):
             if self.shape != data.shape:
                 raise TypeError(
                     f"wrong data shape, expected {self.shape}, got {data.shape}"
                 )
-            result = data.astype(np.dtype(float), copy=True)
+            result = data.copy()
         elif self.domain.size == 0:  # scalar
             result = np.array(data)  # data must be single value, shape is ()
             assert result.shape == self.shape
@@ -188,13 +278,11 @@ class Variable:
             for key, val in data.items():
                 idx = self.domain.indices[key]
                 result[idx] = val
+        result = result.astype(np.dtype(float))
         result = self._validate_data(result)
         return result
 
     def _validate_data(self, data):
-        # no n/a
-        if np.isnan(data).any():
-            raise ValueError("cannot have na")
         return data
 
     @property
@@ -209,18 +297,36 @@ class Variable:
     def vartype(self):
         return self.__vartype
 
+    def __new_domain(self, data, domain):
+        return Variable(
+            data,
+            domain,
+            self.__vartype,
+        )
 
-class PosVariable(Variable):
-    def _validate_data(self, data):
-        data = super()._validate_data(data)
-        if (data < 0).any():
-            raise ValueError("cannot have negative values")
-        return data
+    def transpose(self, dimension_names):
+        indices = [self.__domain.index(n) for n in dimension_names]
+        return self.__new_domain(
+            np.transpose(self.__data, axes=indices),
+            self.__domain.transpose(dimension_names),
+        )
 
+    def squeeze(self):
+        index = self.domain.size - 1
+        return self.__new_domain(
+            np.squeeze(self.__data, axis=index), self.__domain.squeeze()
+        )
 
-class BoolVariable(PosVariable):
-    def _validate_data(self, data):
-        data = super()._validate_data(data)
-        if not (np.isin(data, (0, 1))).all():
-            raise ValueError("values must be 0 or 1")
-        return data
+    def expand(self, dimension):
+        index = self.domain.size
+        return self.__new_domain(
+            np.expand_dims(self.__data, axis=index),
+            self.__domain.expand(dimension),
+        )
+
+    def items(self):
+        data = self.__data.flatten("C")
+        # TODO: fully test that flatten works the same in all versions
+        keys = self.domain.indices.keys()
+        # alternatively: return [(k, self.__data[i]) for k, i in self.domain.indices.items()] # noqa
+        return zip(keys, data)

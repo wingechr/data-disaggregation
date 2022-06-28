@@ -217,6 +217,21 @@ class Domain(FrozenMap):
         dimension_levels.append(dimension)
         return Domain(dimension_levels)
 
+    def __mul__(self, other):
+        if other.size != 2:
+            raise Exception("Dom2 must be of size 2")
+        if not self.size:
+            raise Exception("Dom1 cannot be scalar")
+
+        if self.values()[-1] != other.values()[0]:
+            raise Exception(
+                f"Last dimension level of Dom1({self.values()[-1]}) must match first dimension level of Dom2({other.values()[0]})"  # noqa
+            )  # noqa
+        dimension_levels_1 = list(self.items())
+        dimension_levels_2 = list(other.items())
+        dimension_levels = dimension_levels_1[:-1] + dimension_levels_2[1:]
+        return Domain(dimension_levels)
+
 
 def assertEqual(items1, items2):
     list1 = list(items1)
@@ -245,6 +260,9 @@ class VarType:
 
     def __init__(self, *arg, **kwargs):
         pass
+
+    def __mul__(self, other):
+        return self  # TODO
 
 
 class Variable:
@@ -290,6 +308,10 @@ class Variable:
         return self.__domain
 
     @property
+    def data(self):
+        return self.__data
+
+    @property
     def shape(self):
         return self.domain.shape
 
@@ -297,31 +319,26 @@ class Variable:
     def vartype(self):
         return self.__vartype
 
-    def __new_domain(self, data, domain):
-        return Variable(
-            data,
-            domain,
-            self.__vartype,
-        )
-
     def transpose(self, dimension_names):
-        indices = [self.__domain.index(n) for n in dimension_names]
-        return self.__new_domain(
+        indices = [self.domain.index(n) for n in dimension_names]
+        return Variable(
             np.transpose(self.__data, axes=indices),
-            self.__domain.transpose(dimension_names),
+            self.domain.transpose(dimension_names),
+            self.vartype,
         )
 
     def squeeze(self):
         index = self.domain.size - 1
-        return self.__new_domain(
-            np.squeeze(self.__data, axis=index), self.__domain.squeeze()
+        return Variable(
+            np.squeeze(self.data, axis=index), self.domain.squeeze(), self.vartype
         )
 
     def expand(self, dimension):
         index = self.domain.size
-        return self.__new_domain(
-            np.expand_dims(self.__data, axis=index),
-            self.__domain.expand(dimension),
+        return Variable(
+            np.expand_dims(self.data, axis=index),
+            self.domain.expand(dimension),
+            self.vartype,
         )
 
     def items(self):
@@ -330,3 +347,31 @@ class Variable:
         keys = self.domain.indices.keys()
         # alternatively: return [(k, self.__data[i]) for k, i in self.domain.indices.items()] # noqa
         return zip(keys, data)
+
+    def __add__(self, other):
+        if isinstance(other, (int, float)):
+            return Variable(self.data + other, self.domain, self.vartype)
+        elif isinstance(other, Variable):
+            if self.domain != other.domain:
+                raise Exception("Domain must be the same")
+            if self.vartype != other.vartype:
+                raise Exception("Vartype must be the same")
+            return Variable(self.data + other.data, self.domain, self.vartype)
+        else:
+            raise NotImplementedError(f"Variable + {other.__class__.name}")
+
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            return Variable(
+                self.data * other,
+                self.domain,
+                self.vartype,
+            )
+        elif isinstance(other, Variable):
+            return Variable(
+                np.matmul(self.data, other.data),
+                self.domain * other.domain,
+                self.vartype * other.vartype,
+            )
+        else:
+            raise NotImplementedError(f"Variable + {other.__class__.name}")

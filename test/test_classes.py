@@ -111,3 +111,23 @@ class TestDimensionLevel(unittest.TestCase):
         v = v.transpose(("d1", "d1b"))
         v = v.squeeze()
         self.assertEqual(tuple(v.domain.keys()), ("d1",))
+
+    def test_mult_add(self):
+        dom1 = self.dim1_lev1
+        v1 = Variable({"a": 2, "b": 2}, dom1, None)
+
+        dom2 = [self.dim1_lev1.alias("d1b"), self.dim1_lev2]
+        v2 = Variable(
+            {("a", "X"): 1, ("a", "Y"): 2, ("b", "Y"): 3, ("b", "Z"): 3}, dom2, None
+        )
+
+        self.assertRaises(Exception, lambda: v2 * v1)
+        v3 = v1 * v2
+        data = dict(kv for kv in v3.items() if kv[1])
+        self.assertDictEqual(data, {"X": 2 * 1, "Y": 2 * 2 + 2 * 3, "Z": 2 * 3})
+
+        v4 = (v3 * v2.transpose(["d1", "d1b"])) + v1 * 0.5
+        data = dict(kv for kv in v4.items() if kv[1])
+        self.assertDictEqual(
+            data, {"a": 1 * 2 + 2 * 10 + 2 * 0.5, "b": 3 * 10 + 3 * 6 + 2 * 0.5}
+        )

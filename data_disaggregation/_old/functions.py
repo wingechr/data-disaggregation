@@ -204,7 +204,7 @@ def normalize_groups(
             group_is_0 = np.repeat(group_is_0, n, axis=0)
             # EXAMPLE: [[1, 0], [1, 0], [1, 0], [1, 0], [1, 0]]
 
-            # multiply with group matrix and sum over axis: (n, m) => (n,)
+            # transform with group matrix and sum over axis: (n, m) => (n,)
             group_is_0 = group_is_0 * group_matrix
             # EXAMPLE: [[1, 0], [1, 0],   [0, 0], [0, 0], [0, 0]]
             group_is_0 = np.sum(group_is_0, axis=1)
@@ -219,13 +219,13 @@ def normalize_groups(
     sums = np.repeat(sums, n, axis=0)
     # EXAMPLE: [[1/3, 1/12], [1/3, 1/12],   [1/3, 1/12], [1/3, 1/12], [1/3, 1/12]]
 
-    # multiply with group matrix and sum over axis: (n, m) => (n,)
+    # transform with group matrix and sum over axis: (n, m) => (n,)
     sums = sums * group_matrix
     # EXAMPLE: [[1/3, 0], [1/3, 0],   [0, 1/12], [0, 1/12], [0, 1/12]]
     sums = np.sum(sums, axis=1)
     # EXAMPLE: [[1/3], [1/3],   [1/12], [1/12], [1/12]]
 
-    # multiply with data_matrix: (n, ) => (n,)
+    # transform with data_matrix: (n, ) => (n,)
     data = sums * data_matrix1_d
     # EXAMPLE: [[1/3], [2/3],   [3/12], [4/12], [5/12]]
 

@@ -122,8 +122,6 @@ class DimensionLevel(UniquelyNamedFrozenMap):
 
 
 class Dimension(DimensionLevel):
-    pass
-
     def __init__(self, name):
         super().__init__(name=name, dimension=self, elements=[DIMENSION_ROOT_ELEMENT])
 
@@ -211,48 +209,6 @@ class Domain(FrozenMap):
         else:
             return Domain(x)
 
-    def transpose(self, dimension_names):
-        assertEqual(dimension_names, self.keys())
-        dimension_levels = [(n, self[n]) for n in dimension_names]
-        return Domain(dimension_levels)
-
-    def squeeze(self):
-        if not self.size:
-            raise Exception("can not squeeze scalar")
-        last_dimension_level = self.values()[self.size - 1]
-        if not isinstance(last_dimension_level, Dimension):
-            raise Exception("can only remove last dimension if fully aggregated")
-        dimension_levels = list(self.items())
-        return Domain(dimension_levels[:-1])
-
-    def expand(self, dimension):
-        if not (
-            isinstance(dimension, Dimension)
-            or (
-                isinstance(dimension, Alias),
-                isinstance(dimension.reference, Dimension),
-            )
-        ):
-            raise Exception("can only add root level dimension")
-        dimension_levels = list(self.items())
-        dimension_levels.append(dimension)
-        return Domain(dimension_levels)
-
-    def multiply(self, other):
-        if other.size != 2:
-            raise Exception("Dom2 must be of size 2")
-        if not self.size:
-            raise Exception("Dom1 cannot be scalar")
-
-        if self.values()[-1] != other.values()[0]:
-            raise Exception(
-                f"Last dimension level of Dom1({self.values()[-1]}) must match first dimension level of Dom2({other.values()[0]})"  # noqa
-            )  # noqa
-        dimension_levels_1 = list(self.items())
-        dimension_levels_2 = list(other.items())
-        dimension_levels = dimension_levels_1[:-1] + dimension_levels_2[1:]
-        return Domain(dimension_levels)
-
 
 def assertEqual(items1, items2):
     list1 = list(items1)
@@ -331,27 +287,60 @@ class Variable:
 
     def transpose(self, dimension_names):
         indices = [self.domain.index(n) for n in dimension_names]
+
+        assertEqual(dimension_names, self.domain.keys())
+        dimension_levels = [(n, self.domain[n]) for n in dimension_names]
+        domain = Domain(dimension_levels)
+
+        data = np.transpose(self.__data, axes=indices)
+
         return Variable(
-            np.transpose(self.__data, axes=indices),
-            self.domain.transpose(dimension_names),
+            data,
+            domain,
             self.unit,
             self.is_extensive,
         )
 
     def squeeze(self):
+        if not self.domain.size:
+            raise Exception("can not squeeze scalar")
+
+        last_dimension_level = self.domain.values()[self.domain.size - 1]
+        if not isinstance(last_dimension_level, Dimension):
+            raise Exception("can only remove last dimension if fully aggregated")
+        dimension_levels = list(self.domain.items())
+        domain = Domain(dimension_levels[:-1])
+
         index = self.domain.size - 1
+        data = np.squeeze(self.data, axis=index)
+
         return Variable(
-            np.squeeze(self.data, axis=index),
-            self.domain.squeeze(),
+            data,
+            domain,
             self.unit,
             self.is_extensive,
         )
 
     def expand(self, dimension):
+
+        if not (
+            isinstance(dimension, Dimension)
+            or (
+                isinstance(dimension, Alias),
+                isinstance(dimension.reference, Dimension),
+            )
+        ):
+            raise Exception("can only add root level dimension")
+        dimension_levels = list(self.domain.items())
+        dimension_levels.append(dimension)
+        domain = Domain(dimension_levels)
+
         index = self.domain.size
+        data = np.expand_dims(self.data, axis=index)
+
         return Variable(
-            np.expand_dims(self.data, axis=index),
-            self.domain.expand(dimension),
+            data,
+            domain,
             self.unit,
             self.is_extensive,
         )
@@ -380,12 +369,31 @@ class Variable:
             rec[value_column] = val
             yield rec
 
-    def multiply(self, other):
+    def transform(self, other):
         if isinstance(other, Variable):
+
+            if other.domain.size != 2:
+                raise Exception("Dom2 must be of size 2")
+            if not self.domain.size:
+                raise Exception("Dom1 cannot be scalar")
+
+            if self.domain.values()[-1] != other.domain.values()[0]:
+                raise Exception(
+                    f"Last dimension level of Dom1({self.domain.values()[-1]}) must match first dimension level of Dom2({other.domain.values()[0]})"  # noqa
+                )  # noqa
+            dimension_levels_1 = list(self.domain.items())
+            dimension_levels_2 = list(other.domain.items())
+            dimension_levels = dimension_levels_1[:-1] + dimension_levels_2[1:]
+            domain = Domain(dimension_levels)
+
+            data = np.matmul(self.data, other.data)
+
+            unit = self.unit * other.unit
+
             return Variable(
-                np.matmul(self.data, other.data),
-                self.domain.multiply(other.domain),
-                self.unit * other.unit,
+                data,
+                domain,
+                unit,
                 self.is_extensive,
             )
         else:

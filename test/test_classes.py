@@ -106,7 +106,7 @@ class TestDimensionLevel(unittest.TestCase):
         self.assertEqual(tuple(v.domain.keys()), ("d1",))
 
     def test_mult_add(self):
-        dom1 = self.dim1_lev1
+        dom1 = self.dim1_lev1.alias("d1x")
         v1 = Variable({"a": 2, "b": 2}, dom1, None, True)
 
         dom2 = [self.dim1_lev1.alias("d1b"), self.dim1_lev2]
@@ -118,7 +118,7 @@ class TestDimensionLevel(unittest.TestCase):
         )
 
         self.assertRaises(Exception, partial(v2.transform, v1))
-        v3 = v1.transform(v2.normalize_transform())
+        v3 = v1.transform(v2.normalize_transform(dimension_name="d1x"))
         assertAlmostEqualDict(self, v3, {"X": 2 / 3, "Y": 7 / 3, "Z": 1})
 
     def test_normalize(self):

@@ -159,7 +159,7 @@ class Alias:
 
 
 def parse_dimension_levels(dimension_levels):
-    if isinstance(dimension_levels, DimensionLevel):
+    if isinstance(dimension_levels, (DimensionLevel, Alias)):
         # only one passed
         dimension_levels = [dimension_levels]
     elif dimension_levels is None:  # scalar

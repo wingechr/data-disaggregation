@@ -109,8 +109,8 @@ class TestDimensionLevel(unittest.TestCase):
             True,
         )
 
-        self.assertRaises(Exception, lambda: v2 * v1)
-        v3 = v1 * v2
+        self.assertRaises(Exception, partial(v2.multiply, v1))
+        v3 = v1.multiply(v2)
         data = dict(kv for kv in v3.items() if kv[1])
         self.assertDictEqual(data, {"X": 2 * 1, "Y": 2 * 2 + 2 * 3, "Z": 2 * 3})
 

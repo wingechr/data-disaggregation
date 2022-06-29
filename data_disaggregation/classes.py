@@ -238,7 +238,7 @@ class Domain(FrozenMap):
         dimension_levels.append(dimension)
         return Domain(dimension_levels)
 
-    def __mul__(self, other):
+    def multiply(self, other):
         if other.size != 2:
             raise Exception("Dom2 must be of size 2")
         if not self.size:
@@ -363,16 +363,12 @@ class Variable:
         # alternatively: return [(k, self.__data[i]) for k, i in self.domain.indices.items()] # noqa
         return zip(keys, data)
 
-    def __mul__(self, other):
-        if isinstance(other, (int, float)):
-            return Variable(
-                self.data * other, self.domain, self.unit, self.is_extensive
-            )
-        elif isinstance(other, Variable):
+    def multiply(self, other):
+        if isinstance(other, Variable):
             return Variable(
                 np.matmul(self.data, other.data),
-                self.domain * other.domain,
-                self.unit * other.unit,  # FIXME
+                self.domain.multiply(other.domain),
+                self.unit * other.unit,
                 self.is_extensive,
             )
         else:

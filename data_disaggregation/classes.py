@@ -82,9 +82,9 @@ class UniquelyNamedFrozenMap(FrozenMap):
 
     def __init__(self, name, items, value_class):
         # elements: map elem -> index
+        self.__name = name
         if name in self.__instances:
             raise KeyError(f"{name} is not a unique name")
-        self.__name = name
         self.__instances[self.name] = self
 
         super().__init__(items, value_class)
@@ -119,6 +119,10 @@ class DimensionLevel(UniquelyNamedFrozenMap):
 
     def alias(self, name):
         return Alias(name, self)
+
+    @property
+    def is_dimension_root(self):
+        return self == self.__dimension
 
 
 class Dimension(DimensionLevel):
@@ -301,7 +305,7 @@ class Variable:
             self.is_extensive,
         )
 
-    def squeeze(self):
+    def _squeeze(self):
         if not self.domain.size:
             raise Exception("can not squeeze scalar")
 
@@ -321,7 +325,7 @@ class Variable:
             self.is_extensive,
         )
 
-    def expand(self, dimension):
+    def _expand(self, dimension):
 
         if not (
             isinstance(dimension, Dimension)
@@ -369,33 +373,60 @@ class Variable:
             rec[value_column] = val
             yield rec
 
-    def transform(self, other):
+    def transform(self, other, autosqueeze=True):
         if isinstance(other, Variable):
+            result = self
 
             if other.domain.size != 2:
                 raise Exception("Dom2 must be of size 2")
-            if not self.domain.size:
+
+            o_first_dim_name, o_second_dim_name = other.domain.keys()
+            o_first_dim_level, o_second_dim_level = other.domain.values()
+
+            # transformation
+            if (
+                o_first_dim_level.is_dimension_root  # starts at dimension root
+                and not o_first_dim_name
+                and o_second_dim_name not in result.domain
+            ):
+                # add dimension without name
+                result = result._expand(o_first_dim_level.alias(None))
+
+            if not result.domain.size:
                 raise Exception("Dom1 cannot be scalar")
 
-            if self.domain.values()[-1] != other.domain.values()[0]:
+            last_dim_level = result.domain.values()[-1]
+
+            if last_dim_level != o_first_dim_level:
                 raise Exception(
-                    f"Last dimension level of Dom1({self.domain.values()[-1]}) must match first dimension level of Dom2({other.domain.values()[0]})"  # noqa
+                    f"Last dimension level of Dom1({last_dim_level}) must match first dimension level of Dom2({o_first_dim_level})"  # noqa
                 )  # noqa
-            dimension_levels_1 = list(self.domain.items())
+
+            dimension_levels_1 = list(result.domain.items())
             dimension_levels_2 = list(other.domain.items())
+
             dimension_levels = dimension_levels_1[:-1] + dimension_levels_2[1:]
             domain = Domain(dimension_levels)
 
-            data = np.matmul(self.data, other.data)
+            data = np.matmul(result.data, other.data)
 
-            unit = self.unit * other.unit
+            unit = result.unit * other.unit
 
-            return Variable(
+            result = Variable(
                 data,
                 domain,
                 unit,
-                self.is_extensive,
+                result.is_extensive,
             )
+
+            if (
+                autosqueeze
+                and o_second_dim_level.is_dimension_root
+                and not o_second_dim_name
+            ):
+                result = result._squeeze()
+
+            return result
         else:
             raise NotImplementedError(f"Variable + {other.__class__.name}")
 

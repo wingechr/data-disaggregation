@@ -89,12 +89,12 @@ class TestDimensionLevel(unittest.TestCase):
 
     def test_dom_insert_squeeze(self):
         v = Variable({}, self.dim1_lev1, None, True)
-        v = v.expand(self.dim1.alias("d1b"))
+        v = v._expand(self.dim1.alias("d1b"))
         self.assertEqual(tuple(v.domain.keys()), ("d1", "d1b"))
         v = v.transpose(("d1b", "d1"))
-        self.assertRaises(Exception, partial(v.squeeze))
+        self.assertRaises(Exception, partial(v._squeeze))
         v = v.transpose(("d1", "d1b"))
-        v = v.squeeze()
+        v = v._squeeze()
         self.assertEqual(tuple(v.domain.keys()), ("d1",))
 
     def test_mult_add(self):
@@ -133,3 +133,49 @@ class TestDimensionLevel(unittest.TestCase):
         self.assertEqual(v2.data, 1000)
         # to dimensionless hould fail
         self.assertRaises(Exception, partial(v.to_unit, None))
+
+    def test_transform(self):
+        # start with scalar
+        v = Variable(10, None, None, True)
+
+        # TODO: ugly hack: we want to test if we can create
+        # a combined transform variable from None -> None,
+        # but cannot use None as name twice
+
+        none1 = None
+        none2 = ""
+
+        # auto expand via transform
+        vt1 = Variable(
+            {(None, "a"): 0.6, (None, "b"): 0.4},
+            [self.dim1.alias(none1), self.dim1_lev1],
+            None,
+            True,
+        )
+        v1 = v.transform(vt1)
+        self.assertDictEqual(dict(v1.items()), {"a": 6, "b": 4})
+
+        # change level
+        vt2 = Variable(
+            {("a", "X"): 1, ("b", "Y"): 1},
+            [self.dim1_lev1, self.dim1_lev2.alias("d1b")],
+            None,
+            True,
+        )
+        v2 = v1.transform(vt2)
+        self.assertDictEqual(dict(v2.items()), {"X": 6, "Y": 4, "Z": 0})
+
+        # auto squeeze
+        vt3 = Variable(
+            {("X", None): 0.1, ("Y", None): 0.2},
+            [self.dim1_lev2.alias("d1b"), self.dim1.alias(none2)],
+            None,
+            True,
+        )
+        v3 = v2.transform(vt3)
+        self.assertEqual(v3.data, 6 * 0.1 + 4 * 0.2)
+
+        # do it in one step
+        vt = vt1.transform(vt2).transform(vt3, autosqueeze=False)
+        v4 = v.transform(vt)
+        self.assertEqual(v3.data, v4.data)

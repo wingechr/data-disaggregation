@@ -186,3 +186,7 @@ class TestDimensionLevel(unittest.TestCase):
         vt = vt1.transform(vt2).transform(vt3)
         v4 = v.transform(vt)
         self.assertEqual(v3.data, v4.data)
+
+        # do it in list
+        v5 = v.transform([vt1, vt2, vt3])
+        self.assertEqual(v3.data, v5.data)

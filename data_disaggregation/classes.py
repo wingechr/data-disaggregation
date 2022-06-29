@@ -423,7 +423,13 @@ class Variable:
         * if second level is root and empty level name : squeeze
 
         """
-        if isinstance(other, Variable):
+        if isinstance(other, list):
+            result = self
+            for t in other:
+                result = result.transform(t)
+            return result
+
+        elif isinstance(other, Variable):
 
             if not isinstance(other.domain, TransformDomain):
                 raise TypeError("Dom2 must be of type TransformDomain")

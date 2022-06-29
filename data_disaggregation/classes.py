@@ -1,5 +1,5 @@
-import functools
 import logging  # noqa
+from enum import Enum
 from itertools import product
 
 import numpy as np
@@ -17,14 +17,11 @@ def get_unit(x):
 DIMENSION_ROOT_ELEMENT = None
 
 
-def only_2d(fun):
-    @functools.wraps(fun)
-    def _fun(self, *args, **kwargs):
-        if not len(self.shape) == 2:
-            raise TypeError("Must be 2D")
-        return fun(self, *args, **kwargs)
-
-    return _fun
+class TransformName(Enum):
+    FROM = "FROM"
+    TO = "TO"
+    SQUEEZE = "SQUEEZE"
+    EXPAND = "EXPAND"
 
 
 class FrozenMap:
@@ -109,6 +106,9 @@ class DimensionLevel(UniquelyNamedFrozenMap):
             raise TypeError(f"{dimension} is not of type Dimension")
         self.__dimension = dimension
 
+    def __str__(self):
+        return f"DimensionLevel({self.dimension.name}={self.name})"
+
     @property
     def dimension(self):
         return self.__dimension
@@ -119,6 +119,18 @@ class DimensionLevel(UniquelyNamedFrozenMap):
 
     def alias(self, name):
         return Alias(name, self)
+
+    def aliasFrom(self):
+        if self.is_dimension_root:
+            return Alias(TransformName.EXPAND, self)
+        else:
+            return Alias(TransformName.FROM, self)
+
+    def aliasTo(self):
+        if self.is_dimension_root:
+            return Alias(TransformName.SQUEEZE, self)
+        else:
+            return Alias(TransformName.TO, self)
 
     @property
     def is_dimension_root(self):
@@ -152,7 +164,7 @@ def parse_dimension_levels(dimension_levels):
         dimension_levels = [dimension_levels]
     elif dimension_levels is None:  # scalar
         dimension_levels = []
-    elif isinstance(dimension_levels, dict):
+    elif isinstance(dimension_levels, (dict, Domain)):
         dimension_levels = dimension_levels.items()
     for x in dimension_levels:
         if isinstance(x, Alias):
@@ -174,12 +186,12 @@ class Domain(FrozenMap):
         if self.size == 0:
             self.__indices = FrozenMap([], int)
         elif self.size == 1:
-            self.__indices = FrozenMap(self.dimension_levels[0].items(), int)
+            self.__indices = FrozenMap(self.values()[0].items(), int)
         else:
             self.__indices = FrozenMap(
                 zip(
-                    product(*[d.keys() for d in self.dimension_levels]),
-                    product(*[d.values() for d in self.dimension_levels]),
+                    product(*[d.keys() for d in self.values()]),
+                    product(*[d.values() for d in self.values()]),
                 ),
                 tuple,
             )
@@ -192,7 +204,7 @@ class Domain(FrozenMap):
 
     @property
     def shape(self):
-        return tuple(d.size for d in self.dimension_levels)
+        return tuple(d.size for d in self.values())
 
     @property
     def size(self):
@@ -202,16 +214,40 @@ class Domain(FrozenMap):
     def indices(self):
         return self.__indices
 
-    @property
-    def dimension_levels(self):
-        return tuple(self.values())
-
     @classmethod
     def as_domain(cls, x):
         if isinstance(x, Domain):
             return x
         else:
             return Domain(x)
+
+
+class TransformDomain(Domain):
+    __slots__ = ["__dimension_name"]
+
+    def __init__(self, dimension_levels, dimension_name=None):
+        dimension_levels = list(parse_dimension_levels(dimension_levels))
+        dimension_levels = list(x[1] for x in dimension_levels)
+
+        if len(dimension_levels) != 2:
+            raise TypeError("must have 2 dims")
+        dim, dim2 = [d.dimension for d in dimension_levels]
+        if dim != dim2:
+            raise TypeError("must be in same dimension")
+        self.__dimension_name = dimension_name or dim.name
+        dimension_levels = (
+            dimension_levels[0].aliasFrom(),
+            dimension_levels[1].aliasTo(),
+        )
+        super().__init__(dimension_levels)
+
+    @property
+    def dimension_name(self):
+        return self.__dimension_name
+
+    @property
+    def dimension(self):
+        return self.values()[0]  # both are the same
 
 
 def assertEqual(items1, items2):
@@ -373,40 +409,64 @@ class Variable:
             rec[value_column] = val
             yield rec
 
-    def transform(self, other, autosqueeze=True):
+    def transform(self, other):
+
+        """
+        TODO:
+        transformvariable must fullfill special conditions
+        * must be normalized for extensive/intensive
+        * must be 2d in same dimension
+        * first level name: FROM or EXPAND
+        * second level name: TO or SQUEEZE
+
+        * if dim_name/alias not in self: expand
+        * if second level is root and empty level name : squeeze
+
+        """
         if isinstance(other, Variable):
+
+            if not isinstance(other.domain, TransformDomain):
+                raise TypeError("Dom2 must be of type TransformDomain")
+
             result = self
-
-            if other.domain.size != 2:
-                raise Exception("Dom2 must be of size 2")
-
             o_first_dim_name, o_second_dim_name = other.domain.keys()
             o_first_dim_level, o_second_dim_level = other.domain.values()
 
-            # transformation
-            if (
-                o_first_dim_level.is_dimension_root  # starts at dimension root
-                and not o_first_dim_name
-                and o_second_dim_name not in result.domain
-            ):
-                # add dimension without name
-                result = result._expand(o_first_dim_level.alias(None))
+            if isinstance(result.domain, TransformDomain):  # combine transformation
+                pass
+            else:  # normal
+                if o_first_dim_name == TransformName.EXPAND:
+                    result = result._expand(
+                        o_first_dim_level.alias(other.domain.dimension_name)
+                    )
+                # make sure dimension is last
+                dimension_names = list(result.domain.keys())
+                index = dimension_names.index(other.domain.dimension_name)
+                if index != result.domain.size - 1:
+                    # move to end
+                    dimension_names.append(dimension_names.pop(index))
+                    result = result.transpose(dimension_names)
 
             if not result.domain.size:
                 raise Exception("Dom1 cannot be scalar")
 
-            last_dim_level = result.domain.values()[-1]
+            r_last_dim_level = result.domain.values()[-1]
 
-            if last_dim_level != o_first_dim_level:
+            if r_last_dim_level != o_first_dim_level:
                 raise Exception(
-                    f"Last dimension level of Dom1({last_dim_level}) must match first dimension level of Dom2({o_first_dim_level})"  # noqa
+                    f"Last dimension level of Dom1({r_last_dim_level}) must match first dimension level of Dom2({o_first_dim_level})"  # noqa
                 )  # noqa
 
             dimension_levels_1 = list(result.domain.items())
-            dimension_levels_2 = list(other.domain.items())
 
-            dimension_levels = dimension_levels_1[:-1] + dimension_levels_2[1:]
-            domain = Domain(dimension_levels)
+            if isinstance(self.domain, TransformDomain):
+                dimension_levels = dimension_levels_1[:-1] + [o_second_dim_level]
+                domain = TransformDomain(dimension_levels, self.domain.dimension_name)
+            else:
+                dimension_levels = dimension_levels_1[:-1] + [
+                    o_second_dim_level.alias(other.domain.dimension_name)
+                ]
+                domain = Domain(dimension_levels)
 
             data = np.matmul(result.data, other.data)
 
@@ -420,9 +480,8 @@ class Variable:
             )
 
             if (
-                autosqueeze
-                and o_second_dim_level.is_dimension_root
-                and not o_second_dim_name
+                not isinstance(self.domain, TransformDomain)
+                and o_second_dim_name == TransformName.SQUEEZE
             ):
                 result = result._squeeze()
 
@@ -430,11 +489,13 @@ class Variable:
         else:
             raise NotImplementedError(f"Variable + {other.__class__.name}")
 
-    @only_2d
-    def normalize(self, transposed=False):
+    def normalize_transform(self, for_extensive=True, dimension_name=None):
         if not self.is_extensive:
             raise TypeError("must be extensive")
+        domain = TransformDomain(self.domain, dimension_name=dimension_name)
+
         data = self.data
+        transposed = not (for_extensive)
         if transposed:
             data = data.transpose()
         rows, cols = data.shape
@@ -446,7 +507,8 @@ class Variable:
         if transposed:
             data = data.transpose()
         # result has no unit and is NOT extensive
-        return Variable(data, self.domain, None, False)
+
+        return Variable(data, domain, None, False)
 
     def to_unit(self, unit):
         unit = get_unit(unit)

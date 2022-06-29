@@ -161,7 +161,7 @@ def normalize_groups(
 
     if len(data_matrix1_d.shape) != 1:
         raise DimensionStructureError(
-            "can only normalize one dimensional data, but shape is %s"
+            "can only normalize_transform one dimensional data, but shape is %s"
             % data_matrix1_d.shape
         )
     n = data_matrix1_d.shape[0]

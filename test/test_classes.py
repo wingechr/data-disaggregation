@@ -10,6 +10,15 @@ from data_disaggregation.classes import (
 )
 
 
+def assertAlmostEqualDict(self, d1, d2):
+    d1 = dict((k, v) for k, v in d1.items() if v)
+    d2 = dict((k, v) for k, v in d2.items() if v)
+    for k in set(d1) | set(d2):
+        v1 = d1.get(k)
+        v2 = d2.get(k)
+        self.assertAlmostEqual(v1, v2, msg=f"{k}: {v1} != {v2}")
+
+
 class TestFrozenMap(unittest.TestCase):
     """immutable, ordered map of unique hashables mapping to variables of a type"""
 
@@ -84,8 +93,7 @@ class TestDimensionLevel(unittest.TestCase):
         v = Variable({("a", "a"): 1, ("a", "b"): 2, ("b", "a"): 3}, dom, None, True)
         self.assertRaises(KeyError, partial(v.transpose, ["x"]))
         vt = v.transpose(["d1b", "d1"])
-        data = dict(kv for kv in vt.items() if kv[1])
-        self.assertDictEqual(data, {("a", "a"): 1, ("a", "b"): 3, ("b", "a"): 2})
+        assertAlmostEqualDict(self, vt, {("a", "a"): 1, ("a", "b"): 3, ("b", "a"): 2})
 
     def test_dom_insert_squeeze(self):
         v = Variable({}, self.dim1_lev1, None, True)
@@ -110,22 +118,23 @@ class TestDimensionLevel(unittest.TestCase):
         )
 
         self.assertRaises(Exception, partial(v2.transform, v1))
-        v3 = v1.transform(v2)
-        data = dict(kv for kv in v3.items() if kv[1])
-        self.assertDictEqual(data, {"X": 2 * 1, "Y": 2 * 2 + 2 * 3, "Z": 2 * 3})
+        v3 = v1.transform(v2.normalize_transform())
+        assertAlmostEqualDict(self, v3, {"X": 2 / 3, "Y": 7 / 3, "Z": 1})
 
     def test_normalize(self):
         # check 2d only
         self.assertRaises(
-            TypeError, partial(Variable({}, self.dim1_lev1, None).normalize)
+            TypeError, partial(Variable({}, self.dim1_lev1, None).normalize_transform)
         )
 
         dom = [self.dim1_lev1.alias("d1b"), self.dim1_lev2]
         v = Variable({("a", "X"): 1, ("b", "Z"): 2}, dom, None, True)
-        v.normalize()
+        v.normalize_transform()
 
         # check sum zero
-        self.assertRaises(ValueError, partial(v.normalize, transposed=True))
+        self.assertRaises(
+            ValueError, partial(v.normalize_transform, for_extensive=False)
+        )
 
     def test_to_unit(self):
         v = Variable(10, None, "meter")
@@ -136,24 +145,22 @@ class TestDimensionLevel(unittest.TestCase):
 
     def test_transform(self):
         # start with scalar
-        v = Variable(10, None, None, True)
+        start_val = 10
+        v = Variable(start_val, None, None, True)
 
         # TODO: ugly hack: we want to test if we can create
         # a combined transform variable from None -> None,
         # but cannot use None as name twice
 
-        none1 = None
-        none2 = ""
-
         # auto expand via transform
         vt1 = Variable(
-            {(None, "a"): 0.6, (None, "b"): 0.4},
-            [self.dim1.alias(none1), self.dim1_lev1],
+            {(None, "a"): 3, (None, "b"): 2},
+            [self.dim1.alias("d1a"), self.dim1_lev1],
             None,
             True,
-        )
+        ).normalize_transform(v.is_extensive)
         v1 = v.transform(vt1)
-        self.assertDictEqual(dict(v1.items()), {"a": 6, "b": 4})
+        assertAlmostEqualDict(self, v1, {"a": 6, "b": 4})
 
         # change level
         vt2 = Variable(
@@ -161,21 +168,21 @@ class TestDimensionLevel(unittest.TestCase):
             [self.dim1_lev1, self.dim1_lev2.alias("d1b")],
             None,
             True,
-        )
+        ).normalize_transform(v.is_extensive)
         v2 = v1.transform(vt2)
-        self.assertDictEqual(dict(v2.items()), {"X": 6, "Y": 4, "Z": 0})
+        assertAlmostEqualDict(self, v2, {"X": 6, "Y": 4, "Z": 0})
 
         # auto squeeze
         vt3 = Variable(
-            {("X", None): 0.1, ("Y", None): 0.2},
-            [self.dim1_lev2.alias("d1b"), self.dim1.alias(none2)],
+            {("X", None): 1, ("Y", None): 2, ("Z", None): 5},
+            [self.dim1_lev2.alias("d1b"), self.dim1.alias("d1c")],
             None,
             True,
-        )
+        ).normalize_transform(v.is_extensive)
         v3 = v2.transform(vt3)
-        self.assertEqual(v3.data, 6 * 0.1 + 4 * 0.2)
+        self.assertEqual(v3.data, start_val)
 
         # do it in one step
-        vt = vt1.transform(vt2).transform(vt3, autosqueeze=False)
+        vt = vt1.transform(vt2).transform(vt3)
         v4 = v.transform(vt)
         self.assertEqual(v3.data, v4.data)

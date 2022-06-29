@@ -1,8 +1,6 @@
 import unittest
 from functools import partial
 
-import pandas as pd
-
 from data_disaggregation.classes import (
     Dimension,
     DimensionLevel,
@@ -57,7 +55,6 @@ class TestDimensionLevel(unittest.TestCase):
         self.assertEqual(sd.size, 0)
         self.assertEqual(sd.shape, ())
         self.assertEqual(tuple(sd.indices.keys()), ())
-        _v = Variable(10, sd, None)  # noqa
 
     def test_domain_linear(self):
         sd = Domain(self.dim1_lev1)
@@ -66,9 +63,6 @@ class TestDimensionLevel(unittest.TestCase):
         self.assertEqual(
             tuple(sd.indices.keys()), ("a", "b")
         )  # keys are not tuples but values
-        data = {"a": 1, "b": 2}
-        _v = Variable(data, sd, None)  # noqa
-        _v = Variable(pd.Series(data), sd, None)  # noqa
 
     def test_domain_multi(self):
         sd = Domain([self.dim1_lev1, self.dim1_lev2.alias("d1b")])
@@ -78,15 +72,6 @@ class TestDimensionLevel(unittest.TestCase):
             tuple(sd.indices.keys()),
             (("a", "X"), ("a", "Y"), ("a", "Z"), ("b", "X"), ("b", "Y"), ("b", "Z")),
         )
-        data = [
-            {"d1": "a", "d2": "X", "v": 1},
-            {"d1": "a", "d2": "Y", "v": 2},
-            {"d1": "b", "d2": "Z", "v": 3},
-        ]
-        series = pd.DataFrame(data).set_index(["d1", "d2"])["v"]
-        dct = dict(series.items())
-        _v = Variable(dct, sd, None)  # noqa
-        _v = Variable(series, sd, None)  # noqa
 
     def test_equality(self):
         self.assertEqual(
@@ -96,14 +81,14 @@ class TestDimensionLevel(unittest.TestCase):
 
     def test_transpose(self):
         dom = [self.dim1_lev1, self.dim1_lev1.alias("d1b")]
-        v = Variable({("a", "a"): 1, ("a", "b"): 2, ("b", "a"): 3}, dom, None)
+        v = Variable({("a", "a"): 1, ("a", "b"): 2, ("b", "a"): 3}, dom, None, True)
         self.assertRaises(KeyError, partial(v.transpose, ["x"]))
         vt = v.transpose(["d1b", "d1"])
         data = dict(kv for kv in vt.items() if kv[1])
         self.assertDictEqual(data, {("a", "a"): 1, ("a", "b"): 3, ("b", "a"): 2})
 
     def test_dom_insert_squeeze(self):
-        v = Variable({}, self.dim1_lev1, None)
+        v = Variable({}, self.dim1_lev1, None, True)
         v = v.expand(self.dim1.alias("d1b"))
         self.assertEqual(tuple(v.domain.keys()), ("d1", "d1b"))
         v = v.transpose(("d1b", "d1"))
@@ -114,11 +99,14 @@ class TestDimensionLevel(unittest.TestCase):
 
     def test_mult_add(self):
         dom1 = self.dim1_lev1
-        v1 = Variable({"a": 2, "b": 2}, dom1, None)
+        v1 = Variable({"a": 2, "b": 2}, dom1, None, True)
 
         dom2 = [self.dim1_lev1.alias("d1b"), self.dim1_lev2]
         v2 = Variable(
-            {("a", "X"): 1, ("a", "Y"): 2, ("b", "Y"): 3, ("b", "Z"): 3}, dom2, None
+            {("a", "X"): 1, ("a", "Y"): 2, ("b", "Y"): 3, ("b", "Z"): 3},
+            dom2,
+            None,
+            True,
         )
 
         self.assertRaises(Exception, lambda: v2 * v1)
@@ -126,8 +114,22 @@ class TestDimensionLevel(unittest.TestCase):
         data = dict(kv for kv in v3.items() if kv[1])
         self.assertDictEqual(data, {"X": 2 * 1, "Y": 2 * 2 + 2 * 3, "Z": 2 * 3})
 
-        v4 = (v3 * v2.transpose(["d1", "d1b"])) + v1 * 0.5
-        data = dict(kv for kv in v4.items() if kv[1])
-        self.assertDictEqual(
-            data, {"a": 1 * 2 + 2 * 10 + 2 * 0.5, "b": 3 * 10 + 3 * 6 + 2 * 0.5}
+    def test_normalize(self):
+        # check 2d only
+        self.assertRaises(
+            TypeError, partial(Variable({}, self.dim1_lev1, None).normalize)
         )
+
+        dom = [self.dim1_lev1.alias("d1b"), self.dim1_lev2]
+        v = Variable({("a", "X"): 1, ("b", "Z"): 2}, dom, None, True)
+        v.normalize()
+
+        # check sum zero
+        self.assertRaises(ValueError, partial(v.normalize, transposed=True))
+
+    def test_to_unit(self):
+        v = Variable(10, None, "meter")
+        v2 = v.to_unit("cm")
+        self.assertEqual(v2.data, 1000)
+        # to dimensionless hould fail
+        self.assertRaises(Exception, partial(v.to_unit, None))

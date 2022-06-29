@@ -16,7 +16,7 @@ if __name__ == "__main__":
     setup(
         packages=find_packages(),
         name="data-disaggregation",
-        install_requires=["numpy"],
+        install_requires=["numpy", "pint"],
         keywords=[],
         description=short_description,
         long_description=long_description,

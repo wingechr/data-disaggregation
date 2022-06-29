@@ -1,9 +1,30 @@
+import functools
 import logging  # noqa
 from itertools import product
 
 import numpy as np
+import pint
+
+ureg = pint.UnitRegistry()
+
+
+def get_unit(x):
+    if not x:
+        return ureg.dimensionless
+    return getattr(ureg, str(x))
+
 
 DIMENSION_ROOT_ELEMENT = None
+
+
+def only_2d(fun):
+    @functools.wraps(fun)
+    def _fun(self, *args, **kwargs):
+        if not len(self.shape) == 2:
+            raise TypeError("Must be 2D")
+        return fun(self, *args, **kwargs)
+
+    return _fun
 
 
 class FrozenMap:
@@ -248,35 +269,20 @@ def assertEqual(items1, items2):
         raise KeyError(f"Missing elements in second list: {set1 - set2}")
 
 
-class VarType:
-    __slots__ = []
-
-    @classmethod
-    def as_vartype(cls, x):
-        if isinstance(x, VarType):
-            return x
-        else:
-            return VarType(x)
-
-    def __init__(self, *arg, **kwargs):
-        pass
-
-    def __mul__(self, other):
-        return self  # TODO
-
-
 class Variable:
 
     __slots__ = [
         "__data",
         "__domain",
-        "__vartype",
+        "__unit",
+        "__is_extensive",
     ]
 
-    def __init__(self, data, domain, vartype):
-        self.__domain = Domain.as_domain(domain)
-        self.__vartype = VarType.as_vartype(vartype)
+    def __init__(self, data, domain, unit=None, is_extensive=False):
+        self.__domain = Domain.as_domain(domain)  # must be first
         self.__data = self.__parse_data(data)
+        self.__unit = get_unit(unit)
+        self.__is_extensive = bool(is_extensive)
 
     def __str__(self):
         return f"Variable({self.domain})"
@@ -316,21 +322,29 @@ class Variable:
         return self.domain.shape
 
     @property
-    def vartype(self):
-        return self.__vartype
+    def unit(self):
+        return self.__unit
+
+    @property
+    def is_extensive(self):
+        return self.__is_extensive
 
     def transpose(self, dimension_names):
         indices = [self.domain.index(n) for n in dimension_names]
         return Variable(
             np.transpose(self.__data, axes=indices),
             self.domain.transpose(dimension_names),
-            self.vartype,
+            self.unit,
+            self.is_extensive,
         )
 
     def squeeze(self):
         index = self.domain.size - 1
         return Variable(
-            np.squeeze(self.data, axis=index), self.domain.squeeze(), self.vartype
+            np.squeeze(self.data, axis=index),
+            self.domain.squeeze(),
+            self.unit,
+            self.is_extensive,
         )
 
     def expand(self, dimension):
@@ -338,7 +352,8 @@ class Variable:
         return Variable(
             np.expand_dims(self.data, axis=index),
             self.domain.expand(dimension),
-            self.vartype,
+            self.unit,
+            self.is_extensive,
         )
 
     def items(self):
@@ -348,30 +363,44 @@ class Variable:
         # alternatively: return [(k, self.__data[i]) for k, i in self.domain.indices.items()] # noqa
         return zip(keys, data)
 
-    def __add__(self, other):
-        if isinstance(other, (int, float)):
-            return Variable(self.data + other, self.domain, self.vartype)
-        elif isinstance(other, Variable):
-            if self.domain != other.domain:
-                raise Exception("Domain must be the same")
-            if self.vartype != other.vartype:
-                raise Exception("Vartype must be the same")
-            return Variable(self.data + other.data, self.domain, self.vartype)
-        else:
-            raise NotImplementedError(f"Variable + {other.__class__.name}")
-
     def __mul__(self, other):
         if isinstance(other, (int, float)):
             return Variable(
-                self.data * other,
-                self.domain,
-                self.vartype,
+                self.data * other, self.domain, self.unit, self.is_extensive
             )
         elif isinstance(other, Variable):
             return Variable(
                 np.matmul(self.data, other.data),
                 self.domain * other.domain,
-                self.vartype * other.vartype,
+                self.unit * other.unit,  # FIXME
+                self.is_extensive,
             )
         else:
             raise NotImplementedError(f"Variable + {other.__class__.name}")
+
+    @only_2d
+    def normalize(self, transposed=False):
+        if not self.is_extensive:
+            raise TypeError("must be extensive")
+        data = self.data
+        if transposed:
+            data = data.transpose()
+        rows, cols = data.shape
+        sums = np.sum(data, axis=1).reshape((rows, 1))
+        if (sums == 0).any():
+            raise ValueError("sum = 0")
+        sums = np.repeat(sums, cols, axis=1)
+        data = data / sums
+        if transposed:
+            data = data.transpose()
+        # result has no unit and is NOT extensive
+        return Variable(data, self.domain, None, False)
+
+    def to_unit(self, unit):
+        unit = get_unit(unit)
+        return Variable(
+            unit.from_(self.data * self.unit).magnitude,
+            self.domain,
+            unit,
+            self.is_extensive,
+        )

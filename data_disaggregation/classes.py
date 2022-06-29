@@ -363,6 +363,23 @@ class Variable:
         # alternatively: return [(k, self.__data[i]) for k, i in self.domain.indices.items()] # noqa
         return zip(keys, data)
 
+    def records(self, value_column="value"):
+        names = self.domain.keys()
+        if len(names) == 1:
+
+            def create_record(key):
+                return {names[0]: key}
+
+        else:
+
+            def create_record(key):
+                return dict(zip(names, key))
+
+        for key, val in self.items():
+            rec = create_record(key)
+            rec[value_column] = val
+            yield rec
+
     def multiply(self, other):
         if isinstance(other, Variable):
             return Variable(

@@ -1,3 +1,0 @@
-numpy
-# optional (for additional features)
-pandas

@@ -5,7 +5,6 @@ from pandas import DataFrame, Index, MultiIndex, Series
 
 
 def check_index_names(names: list):
-    assert all(names), "missing names: %s" % str(names)
     assert len(names) == len(set(names))
 
 
@@ -75,13 +74,21 @@ def get_dims(df):
 
 
 def get_input_dims(df):
-    assert df.index.is_unique
+
+    if isinstance(df, Series):
+        df = df.to_frame(None)
+
     if isinstance(df, DataFrame):
         df = ensure_multi_index(df)
+        assert df.index.is_unique
         check_index_names(df.index.names)
         dims_df = get_dims(df)
-    elif isinstance(df, Series):
+    elif isinstance(df, (int, float)):
         dims_df = None
+        df = Series({None: df})
+    elif isinstance(df, dict):
+        dims_df = None
+        df = Series(df)
     else:
         raise TypeError(df)
     logging.debug("=== input dimensions")
@@ -189,18 +196,9 @@ def transform(
     Returns:
         DataFrame | float
 
-    res = transform(df, map, intensive=True)
-    res2b = transform(res, map, intensive=True)
-
-    res2 = transform(res, map2, intensive=True)
-
-    res3 = transform(res2, map3, intensive=True)
-    res4 = transform(res3, map, intensive=True)
-
-
     Example (distribute number):
 
-    >>> df1 = Series({"s": 12, "x": 16})
+    >>> df1 = {"s": 12, "x": 16}
     >>> mp_a = Series({'a1': 1, 'a2': 3}).rename_axis(index='a')
     >>> mp_b = Series({'b1': 1, 'b2': 3}).rename_axis(index='b')
     >>> d = {"c": ["c1", "c1", "c2"], "b": ["b1", "b2", "b2"], "m": 1}
@@ -209,7 +207,7 @@ def transform(
     >>> df2.to_dict('index')
     {'a1': {'s': 3.0, 'x': 4.0}, 'a2': {'s': 9.0, 'x': 12.0}}
     >>> s3 = transform(df2, mp_a)
-    >>> s3.to_dict()
+    >>> s3
     {'s': 12.0, 'x': 16.0}
     >>> df4 = transform(df2, mp_b)
     >>> df4.to_dict('index')
@@ -229,7 +227,7 @@ def transform(
     >>> df6.to_dict('index')
     {'c1': {'s': 7.5, 'x': 10.0}, 'c2': {'s': 4.5, 'x': 6.0}}
 
-    >>> df1 = Series({"s": 12, "x": 16})
+    >>> df1 = {"s": 12, "x": 16}
     >>> mp_a = Series({'a1': 1, 'a2': 3}).rename_axis(index='a')
     >>> mp_b = Series({'b1': 1, 'b2': 3}).rename_axis(index='b')
     >>> d = {"c": ["c1", "c1", "c2"], "b": ["b1", "b2", "b2"], "m": 1}
@@ -238,7 +236,7 @@ def transform(
     >>> df2.to_dict('index')
     {'a1': {'s': 12, 'x': 16}, 'a2': {'s': 12, 'x': 16}}
     >>> s3 = transform(df2, mp_a, intensive=True)
-    >>> s3.to_dict()
+    >>> s3
     {'s': 12.0, 'x': 16.0}
     >>> df4 = transform(df2, mp_b, intensive=True)
     >>> df4.to_dict('index')
@@ -316,12 +314,13 @@ def transform(
         raise NotImplementedError()
 
     # final checks
-    result, dims_result = get_input_dims(result)
-    assert (idx_res is None) == (dims_result is None)
-    if dims_result:
-        assert tuple(dims_result.keys()) == tuple(idx_res.names)
-
-    result = flatten_single_index(result)
+    if idx_res is not None:  # not scalar
+        assert tuple(result.index.names) == tuple(idx_res.names)
+        result = flatten_single_index(result)
+        if tuple(result.index.names) == (None,):
+            result = result[None]
+    else:  # make into dict
+        result = dict(result.iteritems())
 
     logging.debug("== result\n%s", result)
     return result

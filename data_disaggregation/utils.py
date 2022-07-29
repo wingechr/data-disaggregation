@@ -13,26 +13,10 @@ def norm_map(mp: Series, dim_norm: str = None) -> Series:
 
     Args:
         mp (Series): _description_
-        dim_norm (str): _description_
+        dim_norm (OrderedDict): _description_
 
     Returns:
-        Series: _description_
-
-
-    Example:
-
-    >>> d = {'a': ["a1", "a1", "a2"], 'b': ["b1", "b2", "b2"], 'v': [1, 3, 2]}
-    >>> mp = DataFrame(d).set_index(['a', 'b'])['v']
-    >>> norm_map(mp, 'a').to_dict()
-    {('a1', 'b1'): 0.25, ('a1', 'b2'): 0.75, ('a2', 'b2'): 1.0}
-    >>> norm_map(mp, 'b').to_dict()
-    {('a1', 'b1'): 1.0, ('a1', 'b2'): 0.6, ('a2', 'b2'): 0.4}
-
-    >>> mp = Series({"a1": 1, "a2": 3}).rename_axis(index='a')
-    >>> norm_map(mp, 'a').to_dict()
-    {'a1': 1.0, 'a2': 1.0}
-    >>> norm_map(mp, None).to_dict()
-    {'a1': 0.25, 'a2': 0.75}
+        Series: normalised map for transformation
 
     """
     check_index_names(mp.index.names)
@@ -194,72 +178,13 @@ def transform(
     """map data to new index
 
     Args:
-        df (DataFrame | float): data
+        df (DataFrame | Series | dict | float): data
         mp (Series): index mapper
         intensive (bool, optional): normalize target dimension
 
     Returns:
-        DataFrame | float
+        DataFrame | Series | dict | float
 
-    Example (distribute number):
-
-    >>> df1 = {"s": 12, "x": 16}
-    >>> mp_a = Series({'a1': 1, 'a2': 3}).rename_axis(index='a')
-    >>> mp_b = Series({'b1': 1, 'b2': 3}).rename_axis(index='b')
-    >>> d = {"c": ["c1", "c1", "c2"], "b": ["b1", "b2", "b2"], "m": 1}
-    >>> mp_bc = DataFrame(d).set_index(["c", "b"])["m"]
-    >>> df2 = transform(df1, mp_a)
-    >>> df2.to_dict('index')
-    {'a1': {'s': 3.0, 'x': 4.0}, 'a2': {'s': 9.0, 'x': 12.0}}
-    >>> s3 = transform(df2, mp_a)
-    >>> s3
-    {'s': 12.0, 'x': 16.0}
-    >>> df4 = transform(df2, mp_b)
-    >>> df4.to_dict('index')
-    {\
-('a1', 'b1'): {'s': 0.75, 'x': 1.0}, \
-('a1', 'b2'): {'s': 2.25, 'x': 3.0}, \
-('a2', 'b1'): {'s': 2.25, 'x': 3.0}, \
-('a2', 'b2'): {'s': 6.75, 'x': 9.0}}
-    >>> df5 = transform(df4, mp_bc)
-    >>> df5.to_dict('index')
-    {\
-('a1', 'c1'): {'s': 1.875, 'x': 2.5}, \
-('a1', 'c2'): {'s': 1.125, 'x': 1.5}, \
-('a2', 'c1'): {'s': 5.625, 'x': 7.5}, \
-('a2', 'c2'): {'s': 3.375, 'x': 4.5}}
-    >>> df6 = transform(df5, mp_a)
-    >>> df6.to_dict('index')
-    {'c1': {'s': 7.5, 'x': 10.0}, 'c2': {'s': 4.5, 'x': 6.0}}
-
-    >>> df1 = {"s": 12, "x": 16}
-    >>> mp_a = Series({'a1': 1, 'a2': 3}).rename_axis(index='a')
-    >>> mp_b = Series({'b1': 1, 'b2': 3}).rename_axis(index='b')
-    >>> d = {"c": ["c1", "c1", "c2"], "b": ["b1", "b2", "b2"], "m": 1}
-    >>> mp_bc = DataFrame(d).set_index(["c", "b"])["m"]
-    >>> df2 = transform(df1, mp_a, intensive=True)
-    >>> df2.to_dict('index')
-    {'a1': {'s': 12, 'x': 16}, 'a2': {'s': 12, 'x': 16}}
-    >>> s3 = transform(df2, mp_a, intensive=True)
-    >>> s3
-    {'s': 12.0, 'x': 16.0}
-    >>> df4 = transform(df2, mp_b, intensive=True)
-    >>> df4.to_dict('index')
-    {\
-('a1', 'b1'): {'s': 12, 'x': 16}, \
-('a1', 'b2'): {'s': 12, 'x': 16}, \
-('a2', 'b1'): {'s': 12, 'x': 16}, \
-('a2', 'b2'): {'s': 12, 'x': 16}}
-    >>> df5 = transform(df4, mp_bc, intensive=True)
-    >>> df5.to_dict('index')
-    {\
-('a1', 'c1'): {'s': 12.0, 'x': 16.0}, \
-('a1', 'c2'): {'s': 12.0, 'x': 16.0}, \
-('a2', 'c1'): {'s': 12.0, 'x': 16.0}, \
-('a2', 'c2'): {'s': 12.0, 'x': 16.0}}
-    >>> df6 = transform(df5, mp_a, intensive=True)
-    >>> df6.to_dict('index')
-    {'c1': {'s': 12.0, 'x': 16.0}, 'c2': {'s': 12.0, 'x': 16.0}}
 
     """
 

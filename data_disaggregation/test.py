@@ -1,9 +1,16 @@
+import logging
 from unittest import TestCase
 
 import pandas as pd
 
-from . import transform
-from .utils import norm_map
+from data_disaggregation import transform
+from data_disaggregation.utils import norm_map
+
+logging.basicConfig(
+    format="[%(asctime)s %(levelname)7s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.DEBUG,
+)
 
 
 class Tests(TestCase):
@@ -107,3 +114,38 @@ class Tests(TestCase):
         self.assertDictEqual(
             res, {"c1": {"s": 12.0, "x": 16.0}, "c2": {"s": 12.0, "x": 16.0}}
         )
+
+
+class TestExample(TestCase):
+    def test_example(self):
+        # we start with a single value for the country
+        v = 120
+
+        # the country consists of 3 regions of differenz size
+        reg_size = pd.Series({"r1": 2, "r2": 3, "r3": 5}).rename_axis(index="reg")
+
+        # distribute value via size
+        reg_v = transform(v, reg_size)
+
+        # regions are subdivided into subregions, and we have data of
+        # population for each intersection
+        subreg_reg_pop = pd.Series(
+            {
+                ("r1", "sr1a"): 2,
+                ("r1", "sr1b"): 2,
+                ("r2", "sr2a"): 3,
+                ("r3", "sr3a"): 1,
+                ("r3", "sr3b"): 2,
+                ("r3", "sr3c"): 3,
+            }
+        ).rename_axis(index=["reg", "subreg"])
+
+        # use population to further subdivide
+        subreg_v = transform(reg_v, subreg_reg_pop)
+
+        subreg = pd.Index(
+            ["sr1a", "sr1b", "sr2a", "sr3a", "sr3b", "sr3c", "x"], name="subreg"
+        )
+        v2 = transform(subreg_v, subreg)
+
+        self.assertEqual(v, v2)

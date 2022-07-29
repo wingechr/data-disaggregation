@@ -91,6 +91,9 @@ def get_input_dims(df):
         df = Series(df)
     else:
         raise TypeError(df)
+
+    df = df.fillna(0)
+
     logging.debug("=== input dimensions")
     logging.debug(dims_df)
     return df, dims_df
@@ -101,8 +104,10 @@ def get_map_dims(mp):
     assert mp.index.is_unique
     mp = ensure_multi_index(mp)
     check_index_names(mp.index.names)
+    mp = mp.fillna(0)
     assert (mp >= 0).all()
     dims_mp = get_dims(mp)
+
     logging.debug("=== map dimensions")
     logging.debug(dims_mp)
     return mp, dims_mp

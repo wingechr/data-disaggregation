@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 from pandas import DataFrame, MultiIndex, Series
 
-DEFAULT_VALUE_NAME = "value"
+DEFAULT_VALUE_NAME = None
 
 
 def assert_unique(items, allow_none=False, min_items=1, max_items=None):
@@ -86,8 +86,7 @@ def get_input_dims(df):
 
     if isinstance(df, Series):
         df = df.to_frame()
-        df.columns = [None]
-
+        df.columns = [DEFAULT_VALUE_NAME]
     if isinstance(df, DataFrame):
         df = ensure_multi_index(df)
         assert_unique(df.index)
@@ -95,7 +94,7 @@ def get_input_dims(df):
         dims_df = get_dims(df)
     elif isinstance(df, (int, float)):
         dims_df = None
-        df = Series({None: df})
+        df = Series({DEFAULT_VALUE_NAME: df})
     elif isinstance(df, dict):
         dims_df = None
         df = Series(df)
@@ -267,11 +266,11 @@ def transform(
     if idx_res is not None:  # not scalar
         result = flatten_single_index(result)
         # if frame with single column [None] -> make into series
-        if tuple(result.columns) == (None,):
-            result = result[None]
+        if tuple(result.columns) == (DEFAULT_VALUE_NAME,):
+            result = result[DEFAULT_VALUE_NAME]
     else:  # make into dict
         result = dict(result.iteritems())
-        if tuple(result.keys()) == (None,):  # make into value
-            result = result[None]
+        if tuple(result.keys()) == (DEFAULT_VALUE_NAME,):  # make into value
+            result = result[DEFAULT_VALUE_NAME]
 
     return result

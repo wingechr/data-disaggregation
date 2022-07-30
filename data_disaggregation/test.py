@@ -1,15 +1,16 @@
 import logging
+from functools import partial
 from unittest import TestCase
 
 import pandas as pd
 
 from data_disaggregation import transform
-from data_disaggregation.utils import norm_map
+from data_disaggregation.utils import get_map_dims, norm_map
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
+    level=logging.INFO,
 )
 
 
@@ -115,6 +116,72 @@ class Tests(TestCase):
             res, {"c1": {"s": 12.0, "x": 16.0}, "c2": {"s": 12.0, "x": 16.0}}
         )
 
+    def test_map_via_get_map_dims(self):
+        #  map must be 1 or 2-dim index or series
+        # with unique names and values >= 2
+
+        # non unique
+        self.assertRaises(
+            KeyError,
+            partial(get_map_dims, pd.Series(1, index=pd.Index(["a1", "a1"], name="a"))),
+        )
+
+        # no name
+        self.assertRaises(
+            Exception, partial(get_map_dims, pd.Series(1, index=pd.Index(["a1", "a2"])))
+        )
+
+        # too many dims
+        self.assertRaises(
+            KeyError,
+            partial(
+                get_map_dims,
+                pd.Series(
+                    1,
+                    index=pd.MultiIndex.from_product(
+                        [["a1"], ["b1"], ["c1"]], names=["a", "b", "c"]
+                    ),
+                ),
+            ),
+        )
+
+        # unique names
+        self.assertRaises(
+            KeyError,
+            partial(
+                get_map_dims,
+                pd.Series(
+                    1,
+                    index=pd.MultiIndex.from_product(
+                        [["a1"], ["a2"]], names=["a", "a"]
+                    ),
+                ),
+            ),
+        )
+
+        # works
+        mp, dims = get_map_dims(pd.Series(1, index=pd.Index(["a"], name="a")))
+        self.assertIsInstance(mp, pd.Series)
+        self.assertEqual(set(dims), set(["a"]))
+
+    def test_transform_errors(self):
+        d = pd.DataFrame([{"a": "a1", "v": 1}, {"a": "a2", "v": 2}]).set_index("a")["v"]
+        m1 = pd.DataFrame(
+            [{"a": "a1", "b": "b1", "m": 1}, {"a": "a1", "b": "b2", "m": 2}]
+        ).set_index(["a", "b"])["m"]
+        m2 = pd.DataFrame(
+            [{"a": "a1", "b": "b1", "m": 4}, {"a": "a2", "b": "b1", "m": 5}]
+        ).set_index(["a", "b"])["m"]
+
+        # a2 cannot be mapped
+        self.assertRaises(KeyError, partial(transform, d, m1))
+        # but now it can be
+        res = transform(d, m2)
+        self.assertEqual(res.b1, 3)
+        self.assertEqual(res.sum(), 3)
+
+        res = transform(d, m2, intensive=True)
+
 
 class TestExample(TestCase):
     def test_example(self):
@@ -143,8 +210,11 @@ class TestExample(TestCase):
         # use population to further subdivide
         subreg_v = transform(reg_v, subreg_reg_pop)
 
-        subreg = pd.Index(
-            ["sr1a", "sr1b", "sr2a", "sr3a", "sr3b", "sr3c", "x"], name="subreg"
+        subreg = pd.Series(
+            1,
+            index=pd.Index(
+                ["sr1a", "sr1b", "sr2a", "sr3a", "sr3b", "sr3c"], name="subreg"
+            ),
         )
         v2 = transform(subreg_v, subreg)
 

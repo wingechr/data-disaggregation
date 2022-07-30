@@ -1,9 +1,36 @@
 import logging
 from collections import OrderedDict
 
-from pandas import DataFrame, Index, MultiIndex, Series
+from pandas import DataFrame, MultiIndex, Series
 
 DEFAULT_VALUE_NAME = "value"
+
+
+def assert_unique(items, allow_none=False, min_items=1, max_items=None):
+    unique_items = set()
+    duplicate_items = set()
+    for i in items:
+        if not i and not allow_none:
+            raise KeyError("invalid element name: %s", i)
+        if i in unique_items:
+            duplicate_items.add(i)
+        else:
+            unique_items.add(i)
+    if duplicate_items:
+        raise KeyError("Non-unique elements: %s" % (str(sorted(duplicate_items))))
+    if min_items is not None and len(unique_items) < min_items:
+        raise KeyError(
+            "Not enough elements (%d) < (%d)" % (len(unique_items), min_items)
+        )
+    if max_items is not None and len(unique_items) > max_items:
+        raise KeyError(
+            "Not enough elements (%d) < (%d)" % (len(unique_items), max_items)
+        )
+
+
+def assert_instance(obj, inst):
+    if not isinstance(obj, inst):
+        raise TypeError(obj.__class__.__name__)
 
 
 def norm_map(mp: Series, dim_norm: str = None) -> Series:
@@ -17,27 +44,27 @@ def norm_map(mp: Series, dim_norm: str = None) -> Series:
         Series: normalised map for transformation
 
     """
-    assert Index(mp.index.names).is_unique
 
     if dim_norm in mp.index.names:
         # NOTE: if dim_norm is only dim, result is all 1
         # sum over dimension
         msum = mp.groupby(by=dim_norm).sum().to_frame("sum")
-        assert (msum["sum"] > 0).all()
+        if not (msum["sum"] > 0).all():
+            raise ValueError("sum of group must be > 0")
         # must convert series frame so we can join (repeat) sums
         nmap = mp.to_frame("map").join(msum)
         nmap = (nmap["map"] / nmap["sum"]).rename(mp.name)
     else:
         # sum over dimension
         msum = mp.sum()
-        assert msum > 0
+        if not msum > 0:
+            raise ValueError("sum of group must be > 0")
         nmap = mp / msum
     return nmap
 
 
 def ensure_multi_index(df):
     if not isinstance(df.index, MultiIndex):
-        logging.debug("convert to multiindex")
         df.index = MultiIndex.from_tuples(
             tuple((x,) for x in df.index), names=(df.index.name,)
         )
@@ -46,7 +73,6 @@ def ensure_multi_index(df):
 
 def flatten_single_index(df):
     if isinstance(df.index, MultiIndex) and len(df.index.levels) == 1:
-        logging.debug("flatten index")
         df.index = df.index.levels[0]
     return df
 
@@ -59,54 +85,40 @@ def get_dims(df):
 def get_input_dims(df):
 
     if isinstance(df, Series):
-        logging.debug("convert series to frame")
         df = df.to_frame()
         df.columns = [None]
 
     if isinstance(df, DataFrame):
         df = ensure_multi_index(df)
-        assert df.index.is_unique
-        assert Index(df.index.names).is_unique
-        assert all(df.index.names), "all map index levels must be named"
+        assert_unique(df.index)
+        assert_unique(df.index.names)
         dims_df = get_dims(df)
     elif isinstance(df, (int, float)):
-        logging.debug("convert number to series")
         dims_df = None
         df = Series({None: df})
     elif isinstance(df, dict):
-        logging.debug("convert dict to series")
         dims_df = None
         df = Series(df)
     else:
-        raise TypeError(df)
+        raise TypeError(df.__class__.__name__)
 
     df = df.fillna(0)
 
-    logging.debug("input dimensions")
-    logging.debug(dims_df)
-    if isinstance(df, Series):
-        logging.debug("input series name: %s", df.name)
-    else:
-        logging.debug("input frame column names: %s", df.columns)
     return df, dims_df
 
 
 def get_map_dims(mp):
-    if isinstance(mp, Index):
-        logging.debug("convert index to series with value 1")
-        mp = Series(1, index=mp)
+    assert_instance(mp, Series)
+    assert_unique(mp.index)
+    assert_unique(mp.index.names, max_items=2)
 
-    assert isinstance(mp, Series)
-    assert mp.index.is_unique
-    assert all(mp.index.names), "all map index levels must be named"
-    mp = ensure_multi_index(mp)
-    assert Index(mp.index.names).is_unique
     mp = mp.fillna(0)
-    assert (mp >= 0).all()
+    if not (mp >= 0).all():
+        raise ValueError("Values must all be >= 0")
+
+    mp = ensure_multi_index(mp)
     dims_mp = get_dims(mp)
 
-    logging.debug("map dimensions")
-    logging.debug(dims_mp)
     return mp, dims_mp
 
 
@@ -139,22 +151,25 @@ def get_shared_new_dims(dims_df, dims_mp):
     else:
         raise TypeError(map)
 
-    logging.debug(f"dim_shared: {dim_shared}, dim_new: {dim_new}")
-
     if dim_shared:
-        missing_elems = (set(dims_mp[dim_shared]) >= set(dims_df[dim_shared]),)
-        assert missing_elems, f"missing keys: {missing_elems}"
+        missing_elems = set(dims_df[dim_shared]) - set(dims_mp[dim_shared])
+        if missing_elems:
+            raise KeyError("missing elements: %s" % str(missing_elems))
+        excess_elems = set(dims_mp[dim_shared]) - set(dims_df[dim_shared])
+        if excess_elems:
+            raise KeyError("excess elements: %s" % str(excess_elems))
+
     dims_tmp = dims_df.copy()
     if dim_new:
         dims_tmp[dim_new] = dims_mp[dim_new]
 
     idx_tmp = MultiIndex.from_product(dims_tmp.values(), names=dims_tmp.keys())
-    assert Index(idx_tmp.names).is_unique
+    assert_unique(idx_tmp.names)
+
     if dims_result:
         idx_result = MultiIndex.from_product(
             dims_result.values(), names=dims_result.keys()
         )
-        assert Index(idx_result.names).is_unique
     else:
         idx_result = None
 
@@ -191,7 +206,6 @@ def transform(
 
 
     """
-    logging.info("==============================")
 
     df, dims_df = get_input_dims(df)
     mp, dims_mp = get_map_dims(mp)
@@ -251,30 +265,13 @@ def transform(
     # final checks
 
     if idx_res is not None:  # not scalar
-        assert tuple(result.index.names) == tuple(idx_res.names)
         result = flatten_single_index(result)
         # if frame with single column [None] -> make into series
         if tuple(result.columns) == (None,):
             result = result[None]
-            logging.debug("series name: %s", result.name)
-        else:
-            logging.debug("frame columns name: %s", result.columns)
     else:  # make into dict
         result = dict(result.iteritems())
         if tuple(result.keys()) == (None,):  # make into value
             result = result[None]
 
     return result
-
-
-if __name__ == "__main__":
-
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)7s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-    )
-
-    import doctest
-
-    doctest.testmod()

@@ -1,7 +1,5 @@
-sphinxcontrib-napoleon
-sphinxcontrib-mermaid
-m2r2
+sphinx>4
+sphinx_rtd_theme
 nbsphinx
-nbconvert>=6
-ipykernel
-pandas
+myst-parser  # markdown support
+mistune>=2.0.3 # not directly required, pinned by Snyk to avoid a vulnerability

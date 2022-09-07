@@ -20,7 +20,6 @@ jobs:
     - name: install dependencies
       run: |
         cd ${{ github.workspace }}
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
+        python setup.py install
     - name: run unittests
       run: python -m unittest

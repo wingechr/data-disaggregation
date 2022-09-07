@@ -1,6 +1,5 @@
-Table of content
+PROJECT_TEMPLATE
 ================
-
 
 .. toctree::
    :maxdepth: 3

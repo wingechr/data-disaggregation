@@ -1,5 +1,8 @@
-sphinx>4
-sphinx_rtd_theme
 nbsphinx
-myst-parser  # markdown support
+sphinx_rtd_theme
+nbconvert>=6
+ipykernel
+pandas
+sphinx
+myst-parser
 mistune>=2.0.3 # not directly required, pinned by Snyk to avoid a vulnerability

@@ -1,0 +1,23 @@
+/* FIX displaying error that displays class properties horizontally */
+dl.py.property {
+    display: block !important;
+}
+
+.wy-nav-top, .wy-side-nav-search{
+    background-color: #2980b9;
+}
+.wy-side-nav-search input[type="text"] {
+    border-color: #2980b9;
+}
+
+.rst-content table.docutils th {
+    border-left: 1px solid #e1e4e5 !important; /* fix ugly border in table headers */
+}
+.rst-content table.docutils td {
+    border-left: 1px solid #e1e4e5 !important; /* fix ugly border in table headers */
+}
+
+/* hack/fix mathjax alignment */
+.mjx-mtd {
+    text-align: left !important;
+}

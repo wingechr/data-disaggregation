@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.8', '3.10']
     steps:
     - uses: actions/checkout@v2
     - name: set up python ${{ matrix.python-version }}
@@ -20,6 +20,27 @@ jobs:
     - name: install dependencies
       run: |
         cd ${{ github.workspace }}
-        python setup.py install
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
     - name: run unittests
       run: python -m unittest
+
+  deploy:
+    # TODO: this test does not seem to work
+    if: startsWith(github.ref, 'refs/tags')
+    needs: run-tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: set up python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: build
+      run: python setup.py sdist
+    - name: deploy
+      uses: pypa/gh-action-pypi-publish@master
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        skip_existing: true
+        verbose: true

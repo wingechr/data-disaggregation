@@ -8,7 +8,7 @@ BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
 os.environ["PYTHONPATH"] = BASE_DIR
 sys.path.insert(0, BASE_DIR)  # needed for import setup
 
-from setup import pkg  # noqa: E402
+import data_disaggregation as pkg  # noqa: E402
 
 project = pkg.__title__
 description = pkg.__doc__

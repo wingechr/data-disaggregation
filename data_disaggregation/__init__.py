@@ -11,22 +11,19 @@ __email__ = "c.winger@oeko.de"
 __copyright__ = "MIT"
 __url__ = "https://github.com/wingechr/data-disaggregation"
 
-try:
-    from . import draw, exceptions
-    from .classes import (
-        Dimension,
-        DimensionLevel,
-        Domain,
-        ExtensiveScalar,
-        ExtensiveVariable,
-        IntensiveScalar,
-        IntensiveVariable,
-        Variable,
-        Weight,
-    )
-except ImportError:
-    # allow missing imports on install
-    pass
+
+from . import draw, exceptions
+from .classes import (
+    Dimension,
+    DimensionLevel,
+    Domain,
+    ExtensiveScalar,
+    ExtensiveVariable,
+    IntensiveScalar,
+    IntensiveVariable,
+    Variable,
+    Weight,
+)
 
 __all__ = [
     "Dimension",

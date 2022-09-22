@@ -15,7 +15,7 @@ if __name__ == "__main__":
         long_description=long_description,
         # text/markdown or text/x-rst or text/plain
         long_description_content_type="text/markdown",
-        version="0.5.0",
+        version="0.5.1",
         author="Christian Winger",
         author_email="c.winger@oeko.de",
         url="https://github.com/wingechr/data-disaggregation",

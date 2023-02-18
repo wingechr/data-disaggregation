@@ -31,6 +31,19 @@ Algorithm
     * if specified, a threshold for sum(weights)/size(dom2) can be set (usually 0.5)
       to drop elements from output
 
+Helper to create the mapping
+* Given a (multidim) input domain and a (multidim) output domain
+* and a weight mapping over a (arbitrary) weight domain:
+* organize into a unique list by shared dims: dims_in, dims_out
+    => [dims_in_only] + [dims_shared] + [dims_out_only]
+* weightdin MUST be a subset of this, but MAY have fewers
+
+* Steps:
+    * create super domain of cross product of all of those
+    * join weights
+    * create index pairs for result
+
+
 
 """
 

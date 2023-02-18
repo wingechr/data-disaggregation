@@ -1,16 +1,16 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 
 if __name__ == "__main__":
 
     setup(
-        packages=find_packages(),
+        packages=["data_disaggregation"],
         name="data-disaggregation",
         install_requires=["pandas"],
         keywords=[],
         description="",
         long_description="",
         long_description_content_type="text/markdown",
-        version="0.6.0",
+        version="0.7.0",
         author="Christian Winger",
         platforms=["any"],
         license="MIT",

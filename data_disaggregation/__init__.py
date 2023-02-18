@@ -38,46 +38,69 @@ __version__ = "0.7.0"
 
 
 from . import vartpye
-from .utils import is_na
+from .utils import group_sum, is_na
 
 
-def minimal_example(dom1, dom2, dom1_dom2, variable, var_type, threshold=0):
+def get_groups(variable, var_type, dom1_dom2_weights, size1=None):
 
-    d2_items = dict((d, []) for d in dom2)
-    for (d1, d2), w in dom1_dom2.items():
+    groups = {}
+    for (d_f, d_t), w in dom1_dom2_weights.items():
         # get not na value
-        u = variable.get(d1)
-        if is_na(u):
+        v = variable.get(d_f)
+        if is_na(v):
             continue
 
         # extensive scaling
         if var_type == vartpye.VarTypeMetricExt:
-            u /= dom1[d1]
+            # get size of dom1
+            size1 = size1 or group_sum(dom1_dom2_weights.items(), lambda dd: dd[0])
+            v /= size1[d_f]
 
-        d2_items[d2].append((u, w))
+        if d_t not in groups:
+            groups[d_t] = []
+        groups[d_t].append((v, w))
+
+    return groups
+
+
+def minimal_example(
+    variable,
+    var_type,
+    dom1_dom2_weights,
+    size1=None,
+    size2=None,
+    threshold=0,
+    as_int=False,
+):
+    """TODO: speed up by using dataframes or even numpy matrix?"""
+
+    groups = get_groups(variable, var_type, dom1_dom2_weights, size1=size1)
 
     result = {}
-    for d2, data in d2_items.items():
-        if not data:
-            continue
-
+    for d_t, vws in groups.items():
         # weights sum
-        sumw = sum(x[1] for x in data)
+        sumw = sum(w for _, w in vws)
 
         # drop result?
-        if (sumw / dom2[d2]) < threshold:
-            continue
+        if threshold:
+            size2 = size2 or group_sum(dom1_dom2_weights.items(), lambda dd: dd[1])
+            if (sumw / size2[d_t]) < threshold:
+                continue
 
         # normalize weights
-        data = [(u, w / sumw) for u, w in data]
+        vws = [(v, w / sumw) for v, w in vws]
 
         # aggregate
-        v = var_type.weighted_aggregate(data)
+        v = var_type.weighted_aggregate(vws)
 
         # extensive scaling
         if var_type == vartpye.VarTypeMetricExt:
-            v *= dom2[d2]
+            size2 = size2 or group_sum(dom1_dom2_weights.items(), lambda dd: dd[1])
+            v *= size2[d_t]
 
-        result[d2] = v
+        result[d_t] = v
+
+        if issubclass(var_type, vartpye.VarTypeMetric) and as_int:
+            result = dict((d, round(v)) for d, v in result.items())
 
     return result

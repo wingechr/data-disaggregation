@@ -1,6 +1,8 @@
 import logging
 from unittest import TestCase
 
+import pandas as pd
+
 from data_disaggregation import minimal_example, vartpye
 from data_disaggregation.utils import (
     group_sum,
@@ -44,9 +46,7 @@ class TestExample(TestCase):
 
     def get_example(self, var_type):
         return minimal_example(
-            dom1={"a": 1, "b": 2, "c": 3},
-            dom2={"D": 1, "E": 2, "F": 3},
-            dom1_dom2={
+            dom1_dom2_weights={
                 ("a", "F"): 1,
                 ("b", "D"): 1,
                 ("b", "F"): 1,
@@ -55,6 +55,7 @@ class TestExample(TestCase):
             },
             variable={"a": 5, "b": 10, "c": 30},
             var_type=var_type,
+            as_int=True,
         )
 
     def test_example(self):
@@ -68,8 +69,32 @@ class TestExample(TestCase):
 
         res = self.get_example(vartpye.VarTypeMetric)
         for k, v in {"D": 10, "E": 30, "F": 15}.items():
-            self.assertAlmostEqual(v, res[k])
+            self.assertEqual(v, res[k])
 
         res = self.get_example(vartpye.VarTypeMetricExt)
         for k, v in {"D": 5, "E": 20, "F": 20}.items():
-            self.assertAlmostEqual(v, res[k])
+            self.assertEqual(v, res[k])
+
+    def test_pandas_series(self):
+        """indices are multidimensional (dummy second dim)"""
+        ds_dom1_dom2_weights = pd.Series(
+            {
+                (("a", 1), ("F",)): 1,
+                (("b", 1), ("D",)): 1,
+                (("b", 1), ("F",)): 1,
+                (("c", 1), ("E",)): 2,
+                (("c", 1), ("F",)): 1,
+            }
+        )
+        ds_variable = pd.Series({("a", 1): "5", ("b", 1): "10", ("c", 1): "30"})
+
+        res = pd.Series(
+            minimal_example(
+                dom1_dom2_weights=ds_dom1_dom2_weights,
+                variable=ds_variable,
+                var_type=vartpye.VarTypeCategorical,
+            )
+        )
+
+        for k, v in {("D",): "10", ("E",): "30", ("F",): "5"}.items():
+            self.assertEqual(v, res[k])

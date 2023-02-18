@@ -1,4 +1,4 @@
-def group_sum(key_vals):
+def group_sum(key_vals, get_key=None):
     """simple group sum
 
     Args:
@@ -11,9 +11,16 @@ def group_sum(key_vals):
     """
 
     res = {}
-    for k, v in key_vals:
-        res[k] = res.get(k, 0) + v
-    return list(res.items())
+    if not get_key:
+        for k, v in key_vals:
+            res[k] = res.get(k, 0) + v
+    else:
+        # custom get key
+        for k, v in key_vals:
+            k = get_key(k)
+            res[k] = res.get(k, 0) + v
+
+    return res
 
 
 def weighted_sum(value_normweights):
@@ -43,7 +50,7 @@ def weighted_mode(value_normweights):
         key from original list with highest weight
     """
     # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights)
+    value_normweights = group_sum(value_normweights).items()
     # first element of item with highest value
     return sorted(value_normweights, key=lambda vw: vw[1], reverse=True)[0][0]
 
@@ -60,7 +67,7 @@ def weighted_percentile(value_normweights, p=0.5):
         key from original list with highest weight
     """
     # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights)
+    value_normweights = group_sum(value_normweights).items()
     # get cumulative values
     wsum = 0
     for v, w in sorted(value_normweights, key=lambda vw: vw[0]):

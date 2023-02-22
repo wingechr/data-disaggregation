@@ -1,3 +1,5 @@
+from typing import Callable, Mapping
+
 import pandas as pd
 
 
@@ -33,7 +35,7 @@ def as_single_index(x):
     return x
 
 
-def group_sum(key_vals, get_key=None):
+def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     """simple group sum
 
     Args:

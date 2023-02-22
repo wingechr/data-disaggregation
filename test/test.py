@@ -3,7 +3,9 @@ from unittest import TestCase
 
 import pandas as pd
 
-from data_disaggregation import minimal_example, vartpye
+from data_disaggregation import vartype
+from data_disaggregation.base import apply_map
+from data_disaggregation.dataframe import apply_map_df
 from data_disaggregation.utils import (
     as_multi_index,
     as_single_index,
@@ -16,7 +18,7 @@ from data_disaggregation.utils import (
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
+    level=logging.INFO,
 )
 
 
@@ -69,7 +71,63 @@ class TestUtils(TestCase):
         self.assertEqual(res.index[0], "a")
 
 
-class TestExample(TestCase):
+class TestBase(TestCase):
+    """"""
+
+    def get_example(self, vtype):
+        """
+        M | D  E  F | S | V
+        ====================
+        a |       2 | 2 |  5
+        b | 1     2 | 3 | 10
+        c |    2  1 | 3 | 30
+        ====================
+        S | 1  2  5 | 8 |
+
+        Groups: (value, normweight, rescale)
+        D: [(b, 10, 1/1, 1/3)]
+        E: [(c, 30, 2/2, 2/3)]
+        F: [
+            (a,  5, 2/5, 5/2),
+            (b, 10, 2/5, 5/3),
+            (c, 30, 1/5, 5/3)
+        ]
+
+        """
+        map = {
+            ("a", "F"): 2,
+            ("b", "D"): 1,
+            ("b", "F"): 2,
+            ("c", "E"): 2,
+            ("c", "F"): 1,
+        }
+
+        var = {"a": 5, "b": 10, "c": 30}
+
+        return apply_map(vtype=vtype, var=var, map=map, as_int=True)
+
+    def test_example_type_categorical(self):
+        res = self.get_example(vartype.VarTypeCategorical)
+        for k, v in {"D": 10, "E": 30, "F": 5}.items():
+            self.assertEqual(v, res[k])
+
+    def test_example_type_ordinal(self):
+        res = self.get_example(vartype.VarTypeOrdinal)
+        for k, v in {"D": 10, "E": 30, "F": 10}.items():
+            self.assertEqual(v, res[k])
+
+    def test_example_type_metric(self):
+        res = self.get_example(vartype.VarTypeMetric)
+        for k, v in {"D": 10, "E": 30, "F": 12}.items():
+            self.assertEqual(v, res[k])
+
+    def test_example_type_metric_ext(self):
+        res = self.get_example(vartype.VarTypeMetricExt)
+        for k, v in {"D": round(3.33333333), "E": 20, "F": round(21.6666667)}.items():
+            self.assertEqual(v, res[k])
+
+
+class TestDataframe(TestCase):
     """"""
 
     def get_example(self, vtype):
@@ -106,7 +164,7 @@ class TestExample(TestCase):
         s_var = pd.Series({"a": 5, "b": 10, "c": 30})
         s_var.index.names = ["d1"]
 
-        return minimal_example(
+        return apply_map_df(
             s_map=s_map,
             s_var=s_var,
             vtype=vtype,
@@ -114,22 +172,22 @@ class TestExample(TestCase):
         )
 
     def test_example_type_categorical(self):
-        res = self.get_example(vartpye.VarTypeCategorical)
+        res = self.get_example(vartype.VarTypeCategorical)
         for k, v in {"D": 10, "E": 30, "F": 5}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_ordinal(self):
-        res = self.get_example(vartpye.VarTypeOrdinal)
+        res = self.get_example(vartype.VarTypeOrdinal)
         for k, v in {"D": 10, "E": 30, "F": 10}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric(self):
-        res = self.get_example(vartpye.VarTypeMetric)
+        res = self.get_example(vartype.VarTypeMetric)
         for k, v in {"D": 10, "E": 30, "F": 12}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric_ext(self):
-        res = self.get_example(vartpye.VarTypeMetricExt)
+        res = self.get_example(vartype.VarTypeMetricExt)
         for k, v in {"D": round(3.333), "E": 20, "F": round(21.667)}.items():
             self.assertEqual(v, res[k])
 
@@ -168,8 +226,8 @@ class TestExample(TestCase):
             index=d_BC,
         )
 
-        minimal_example(
+        apply_map_df(
             s_var=v_AB,
             s_map=d_BC_,
-            vtype=vartpye.VarTypeCategorical,
+            vtype=vartype.VarTypeCategorical,
         )

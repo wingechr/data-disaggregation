@@ -55,7 +55,8 @@ class VarTypeMetric(VarTypeBase):
 
 class VarTypeMetricExt(VarTypeMetric):
     """
-    Values are extensive, i.e. they are can be transformed into intensive by dividing by domain size
+    Values are extensive, i.e. they are can be transformed into intensive
+    by dividing by domain size
 
     * Examples: population, energy production
     """

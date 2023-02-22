@@ -196,41 +196,53 @@ class TestDataframe(TestCase):
         d_B = pd.Index(["b1", "b2"], name="B")
         d_C = pd.Index(["c1", "c2"], name="C")
         d_AB = pd.MultiIndex.from_product([d_A, d_B])
-        # d_AC = pd.MultiIndex.from_product([d_A, d_C])
+        d_AC = pd.MultiIndex.from_product([d_A, d_C])  # noqa
         d_BC = pd.MultiIndex.from_product([d_B, d_C])
-        # d_ABC = pd.MultiIndex.from_product([d_A, d_B, d_C])
-
-        d_BC_ = pd.MultiIndex.from_tuples(
+        d_ABC = pd.MultiIndex.from_product([d_A, d_B, d_C])  # noqa
+        d_BC_partial = pd.MultiIndex.from_tuples(  # noqa
             [x for x in d_BC if x != ("b1", "c2")], names=d_BC.names
         )
 
         v_AB = pd.Series(
             {
-                ("a1", "b1"): 1,
-                ("a1", "b2"): 2,
-                ("a2", "b1"): 3,
-                ("a2", "b2"): 4,
-                ("a3", "b1"): 5,
-                ("a3", "b2"): 6,
+                ("a1", "b1"): 11,
+                ("a1", "b2"): 12,
+                ("a2", "b1"): 21,
+                ("a2", "b2"): 22,
+                ("a3", "b1"): 31,
+                ("a3", "b2"): 32,
             },
             index=d_AB,
         )
 
         m_BC = pd.Series(  # noqa
             {
-                ("b1", "c1"): 1,
-                ("b1", "c2"): 2,
-                ("b2", "c1"): 3,
-                ("b2", "c2"): 4,
+                ("b1", "c1"): 0.1,
+                ("b2", "c1"): 0.2,
+                ("b1", "c2"): 0.3,
+                ("b2", "c2"): 0.4,
             },
             index=d_BC,
         )
 
-        apply_map_df(
+        res = apply_map_df(
+            vtype=vartype.VarTypeMetric,
             s_var=v_AB,
-            s_map=d_BC_,
-            vtype=vartype.VarTypeCategorical,
+            s_map=m_BC,
         )
+
+        self.assertAlmostEqual(res[("a1", "c1")], 11 * 0.1 / 0.3 + 12 * 0.2 / 0.3)
+
+        m_B = pd.Series(  # noqa
+            {"b1": 2, "b2": 3},
+            index=d_B,
+        )
+
+        res = apply_map_df(
+            vtype=vartype.VarTypeMetric, s_var=v_AB, s_map=m_B, i_out=d_A
+        )
+
+        # self.assertAlmostEqual(res["a1"], ...)
 
 
 class TestBaseExamples(TestCase):

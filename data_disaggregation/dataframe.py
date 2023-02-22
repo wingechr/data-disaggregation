@@ -78,7 +78,6 @@ def apply_map_df(
     threshold=0,
     as_int=False,
 ):
-    """TODO: speed up by using dataframes or even numpy matrix?"""
 
     logging.debug("=======================")
 
@@ -93,6 +92,8 @@ def apply_map_df(
 
     if i_out is None:
         i_out = get_i_out(s_var, s_map)
+
+    # i_out_single_index = not isinstance(i_out, pd.MultiIndex)
 
     i_out = as_multi_index(i_out)
 
@@ -125,5 +126,9 @@ def apply_map_df(
 
     result = pd.Series(result)
     result.index.names = i_out.names
+
+    # TODO: why is this not required?
+    # if i_out_single_index:
+    #    result = as_single_index(result)
 
     return result

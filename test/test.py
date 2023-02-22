@@ -231,3 +231,74 @@ class TestDataframe(TestCase):
             s_map=d_BC_,
             vtype=vartype.VarTypeCategorical,
         )
+
+
+class TestBaseExamples(TestCase):
+    def test_aggregate_ext(self):
+        res = apply_map(
+            vtype=vartype.VarTypeMetricExt,
+            var={1: 1, 2: 1, 3: 10},
+            # size does not matter
+            map={(1, None): 10, (2, None): 20, (3, None): 30},
+            threshold=0.5,
+        )
+        self.assertAlmostEqual(res[None], 1 + 1 + 10)
+
+    def test_aggregate_int(self):
+        res = apply_map(
+            vtype=vartype.VarTypeMetric,
+            var={1: 1, 2: 1, 3: 10},
+            # size does not matter
+            map={(1, None): 10, (2, None): 20, (3, None): 30},
+        )
+        self.assertAlmostEqual(res[None], 1 * 10 / 60 + 1 * 20 / 60 + 10 * 30 / 60)
+
+    def test_disaggregate_thres(self):
+        """case: rasterize a shape to partially overlapping cells"""
+        res = apply_map(
+            vtype=vartype.VarTypeMetricExt,
+            var={None: 100},
+            map={
+                (None, "00"): 0.51,
+                (None, "01"): 0.49,  # cell will be dropped
+                (None, "11"): 0.99,  # cell will be dropped (size = 2)
+                (None, "10"): 1.1,  # (size = 2)
+            },
+            size_f={None: 5},
+            size_t={"00": 1, "01": 1, "11": 2, "10": 2},
+            threshold=0.5,
+        )
+
+        self.assertAlmostEqual(res["00"], 100 / 5)
+        self.assertAlmostEqual(res["10"], 100 / 5 * 2)
+        self.assertAlmostEqual(res.get("11", 0), 0)
+        self.assertAlmostEqual(res.get("01", 0), 0)
+
+    def test_todo(self):
+        """case: split a variable differently in different years"""
+        res = apply_map(
+            vtype=vartype.VarTypeMetricExt,
+            var={
+                ("v1", "t1"): 10,
+                ("v2", "t1"): 11,
+                ("v1", "t2"): 12,
+                ("v2", "t2"): 13,
+            },
+            map={
+                # normalized in t1
+                (("v1", "t1"), ("u1", "t1")): 0.7,
+                (("v1", "t1"), ("u2", "t1")): 0.3,
+                (("v2", "t1"), ("u3", "t1")): 0.2,
+                (("v2", "t1"), ("u4", "t1")): 0.8,
+                # not normalized in t2
+                (("v1", "t2"), ("u1", "t2")): 0.7 * 10,
+                (("v1", "t2"), ("u2", "t2")): 0.3 * 10,
+                (("v2", "t2"), ("u3", "t2")): 11,
+                (("v2", "t2"), ("u4", "t2")): 99,
+            },
+        )
+
+        self.assertEqual(res[("u1", "t1")], 10 * 0.7)
+        self.assertEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
+        self.assertEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
+        self.assertEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)

@@ -4,7 +4,7 @@ from typing import TypeVar
 
 import pandas as pd
 
-from .base import apply_map, group_idx_from, group_idx_to
+from .base import apply_map, group_idx_first, group_idx_second
 from .utils import as_index, as_multi_index, get_levels_dict, is_na
 
 F = TypeVar("F")
@@ -103,12 +103,12 @@ def apply_map_df(
     logging.debug(f"\ns_map_ft:\n{s_map_ft}")
 
     if s_size_f is None:
-        s_size_f = group_idx_from(s_map_ft)
+        s_size_f = group_idx_first(s_map_ft)
     s_size_f = as_multi_index(s_size_f)
     logging.debug(f"\ns_size_f:\n{s_size_f}")
 
     if s_size_t is None:
-        s_size_t = group_idx_to(s_map_ft)
+        s_size_t = group_idx_second(s_map_ft)
     s_size_t = as_multi_index(s_size_t)
 
     logging.debug(f"\ns_size_t:\n{s_size_t}")

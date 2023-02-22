@@ -44,25 +44,22 @@ Helper to create the mapping
 
 """
 
+from typing import Mapping, Tuple, TypeVar
+
 from . import vartype
 from .utils import group_sum, is_na
 from .vartype import VarTypeBase
-
-__version__ = "0.7.0"
-
-import logging
-from typing import Mapping, Tuple, TypeVar
 
 F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
 
 
-def group_idx_from(items: Mapping) -> Mapping:
+def group_idx_first(items: Mapping) -> Mapping:
     return group_sum(items, lambda k: k[0])
 
 
-def group_idx_to(items: Mapping) -> Mapping:
+def group_idx_second(items: Mapping) -> Mapping:
     return group_sum(items, lambda k: k[1])
 
 
@@ -81,9 +78,8 @@ def get_groups(
         if is_na(v):
             continue
 
-        # extensive scaling
+        #  scale extensive => intensive
         if vtype == vartype.VarTypeMetricExt:
-            logging.debug("rescale VarTypeMetricExt")
             v /= size_f[f]
 
         if t not in groups:
@@ -105,8 +101,8 @@ def apply_map(
 
     result = {}
 
-    size_f = size_f or group_idx_from(map)
-    size_t = size_t or group_idx_to(map)
+    size_f = size_f or group_idx_first(map)
+    size_t = size_t or group_idx_second(map)
 
     groups = get_groups(vtype, var, map, size_f)
 
@@ -125,11 +121,11 @@ def apply_map(
         # aggregate
         v = vtype.weighted_aggregate(vws)
 
-        result[t] = v
+        #  re-scale intensive => extensive
+        if vtype == vartype.VarTypeMetricExt:
+            v *= size_t[t]
 
-    # extensive scaling
-    if vtype == vartype.VarTypeMetricExt:
-        result = dict((t, v * size_t[t]) for t, v in result.items())
+        result[t] = v
 
     # rounding
     if as_int and issubclass(vtype, vartype.VarTypeMetric):

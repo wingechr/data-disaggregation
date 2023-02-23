@@ -47,20 +47,12 @@ Helper to create the mapping
 from typing import Mapping, Tuple, TypeVar
 
 from . import vartype
-from .utils import group_sum, is_na
+from .utils import group_idx_first, group_idx_second, is_na
 from .vartype import VarTypeBase
 
 F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
-
-
-def group_idx_first(items: Mapping) -> Mapping:
-    return group_sum(items, lambda k: k[0])
-
-
-def group_idx_second(items: Mapping) -> Mapping:
-    return group_sum(items, lambda k: k[1])
 
 
 def get_groups(

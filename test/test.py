@@ -5,10 +5,13 @@ import pandas as pd
 
 from data_disaggregation import vartype
 from data_disaggregation.base import apply_map
-from data_disaggregation.dataframe import apply_map_df
+from data_disaggregation.dataframe import (
+    align_map,
+    apply_map_df,
+    get_dimension_levels,
+    is_multindex,
+)
 from data_disaggregation.utils import (
-    as_multi_index,
-    as_single_index,
     group_sum,
     weighted_median,
     weighted_mode,
@@ -44,31 +47,64 @@ class TestUtils(TestCase):
         res = weighted_sum([(3, 0.4), (2, 0.25), [1, 0.35]])
         self.assertAlmostEqual(res, 2.05)
 
-    def test_as_multi_index(self):
-        res = as_multi_index(pd.Index(["a"]))
-        self.assertEqual(res[0], ("a",))
+    def test_df_utils(self):
+        s = 10  # scalar
+        self.assertEqual(is_multindex(s), False)
+        lvls = dict(get_dimension_levels(s))
+        self.assertEqual(lvls[None][0], None)
 
-        res = as_multi_index(pd.MultiIndex.from_product([["a"]]))
-        self.assertEqual(res[0], ("a",))
+        d1 = pd.Index([10], name="d1")
+        self.assertEqual(is_multindex(d1), False)
+        lvls = dict(get_dimension_levels(d1))
+        self.assertEqual(lvls["d1"][0], 10)
 
-        res = as_multi_index(pd.Series({"a": 1}))
-        self.assertEqual(res.index[0], ("a",))
+        s1 = pd.Series(index=d1, dtype="float")
+        self.assertEqual(is_multindex(s1), False)
+        lvls = dict(get_dimension_levels(s1))
+        self.assertEqual(lvls["d1"][0], 10)
 
-        res = as_multi_index(pd.Series({("a",): 1}))
-        self.assertEqual(res.index[0], ("a",))
+        dm = pd.MultiIndex.from_product([d1])
+        self.assertEqual(is_multindex(dm), True)
+        lvls = dict(get_dimension_levels(dm))
+        self.assertEqual(lvls["d1"][0], (10,))
 
-    def test_as_single_index(self):
-        res = as_single_index(pd.Index(["a"]))
-        self.assertEqual(res[0], "a")
+        sm = pd.Series(index=dm, dtype="float")
+        self.assertEqual(is_multindex(sm), True)
+        lvls = dict(get_dimension_levels(sm))
+        self.assertEqual(lvls["d1"][0], (10,))
 
-        res = as_single_index(pd.MultiIndex.from_product([["a"]]))
-        self.assertEqual(res[0], "a")
+        # names must be unique
 
-        res = as_single_index(pd.Series({"a": 1}))
-        self.assertEqual(res.index[0], "a")
+        xn = pd.MultiIndex.from_product([[1], [2]], names=["d", "d"])
+        self.assertRaises(Exception, get_dimension_levels, xn)
 
-        res = as_single_index(pd.Series({("a",): 1}))
-        self.assertEqual(res.index[0], "a")
+    def test_align_map_todo(self):
+        d0 = pd.Index([None], name=None)
+        d1 = pd.Index([1], name="d1")
+        d1m = pd.MultiIndex.from_product([d1])
+        d2 = pd.Index([2, 3], name="d2")
+        d2m = pd.MultiIndex.from_product([d2])
+        d12 = pd.MultiIndex.from_product([d1, d2])
+        d3 = pd.Index([4], name="d3")
+        d23 = pd.MultiIndex.from_product([d2, d3])
+
+        res = align_map(d1, pd.Series(1, index=d12), d2)
+        self.assertEqual(res[(1, 2)], 1)
+
+        res = align_map(d1m, pd.Series(1, index=d12), d2)
+        self.assertEqual(res[((1,), 2)], 1)
+
+        res = align_map(d1m, pd.Series(1, index=d12), d2m)
+        self.assertEqual(res[((1,), (2,))], 1)
+
+        res = align_map(d12, pd.Series(1, index=d23), d23)
+        self.assertEqual(res[((1, 2), (2, 4))], 1)
+
+        res = align_map(0, pd.Series(1, index=d1), d1)
+        self.assertEqual(res[(None, 1)], 1)
+
+        res = align_map(d1, pd.Series(1, index=d1), d0)
+        self.assertEqual(res[(1, None)], 1)
 
 
 class TestBase(TestCase):
@@ -190,59 +226,6 @@ class TestDataframe(TestCase):
         res = self.get_example(vartype.VarTypeMetricExt)
         for k, v in {"D": round(3.333), "E": 20, "F": round(21.667)}.items():
             self.assertEqual(v, res[k])
-
-    def test_x(self):
-        d_A = pd.Index(["a1", "a2", "a3"], name="A")
-        d_B = pd.Index(["b1", "b2"], name="B")
-        d_C = pd.Index(["c1", "c2"], name="C")
-        d_AB = pd.MultiIndex.from_product([d_A, d_B])
-        d_AC = pd.MultiIndex.from_product([d_A, d_C])  # noqa
-        d_BC = pd.MultiIndex.from_product([d_B, d_C])
-        d_ABC = pd.MultiIndex.from_product([d_A, d_B, d_C])  # noqa
-        d_BC_partial = pd.MultiIndex.from_tuples(  # noqa
-            [x for x in d_BC if x != ("b1", "c2")], names=d_BC.names
-        )
-
-        v_AB = pd.Series(
-            {
-                ("a1", "b1"): 11,
-                ("a1", "b2"): 12,
-                ("a2", "b1"): 21,
-                ("a2", "b2"): 22,
-                ("a3", "b1"): 31,
-                ("a3", "b2"): 32,
-            },
-            index=d_AB,
-        )
-
-        m_BC = pd.Series(  # noqa
-            {
-                ("b1", "c1"): 0.1,
-                ("b2", "c1"): 0.2,
-                ("b1", "c2"): 0.3,
-                ("b2", "c2"): 0.4,
-            },
-            index=d_BC,
-        )
-
-        res = apply_map_df(
-            vtype=vartype.VarTypeMetric,
-            s_var=v_AB,
-            s_map=m_BC,
-        )
-
-        self.assertAlmostEqual(res[("a1", "c1")], 11 * 0.1 / 0.3 + 12 * 0.2 / 0.3)
-
-        m_B = pd.Series(  # noqa
-            {"b1": 2, "b2": 3},
-            index=d_B,
-        )
-
-        res = apply_map_df(
-            vtype=vartype.VarTypeMetric, s_var=v_AB, s_map=m_B, i_out=d_A
-        )
-
-        # self.assertAlmostEqual(res["a1"], ...)
 
 
 class TestBaseExamples(TestCase):

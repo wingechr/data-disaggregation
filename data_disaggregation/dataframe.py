@@ -1,69 +1,118 @@
-import logging
 from itertools import product
-from typing import TypeVar
+from typing import List, Mapping, Optional, Tuple, TypeVar, Union
 
 import pandas as pd
+from pandas import DataFrame, Index, MultiIndex, Series
 
-from .base import apply_map, group_idx_first, group_idx_second
-from .utils import as_index, as_multi_index, get_levels_dict, is_na
+from .base import apply_map
+from .utils import is_na
 
 F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
 
 
-def get_i_out(i_var, i_map):
-
-    i_map = as_index(i_map)
-    i_var = as_index(i_var)
-    # get input levels: name -> elements
-    common_level_names = set(i_map.names) & set(i_var.names)
-    # get output levels: name -> elements
-    levels = get_levels_dict(i_var) | get_levels_dict(i_map)
-    lvls = dict((k, v) for k, v in levels.items() if k not in common_level_names)
-
-    return pd.MultiIndex.from_product(lvls.values(), names=lvls.keys())
+def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
+    if isinstance(x, (int, float)):
+        return False
+    if isinstance(x, (DataFrame, Series)):
+        x = x.index
+    return isinstance(x, MultiIndex)
 
 
-def align_map(i_var, s_map, i_out):
-    # ------------------------------
-    # create map
-    # ------------------------------
+def get_dimension_levels(
+    x: Union[DataFrame, Series, Index, MultiIndex, float]
+) -> List[Tuple[str, List]]:
+    if isinstance(x, (int, float)):
+        # scalar: dummy dimension
+        return [(None, [None])]
 
-    i_var = as_index(i_var)
+    if isinstance(x, (DataFrame, Series)):
+        x = x.index
 
-    # get input levels: name -> elements
-    input_levels = get_levels_dict(i_var)
+    # names must be unique
+    assert len(x.names) == len(set(x.names))
 
-    # get output levels: name -> elements
-    output_levels = get_levels_dict(i_out)
+    if isinstance(x, MultiIndex):
+        return list(zip(x.names, x.levels))
+    else:
+        return [(x.name, x.values)]
 
-    # get mapping levels: name -> elements
-    # TODO: mapping levels must be non empty subset of all_levels
-    mapping_levels = get_levels_dict(s_map.index)
 
-    # combine input and output levels (output higher priority) to unique set
-    all_levels = input_levels | output_levels
+def get_idx_out(var: Union[DataFrame, Series, Index, MultiIndex, float], map: Series):
+    map_levels = get_dimension_levels(map)
 
-    input_levels_idx = [list(all_levels).index(n) for n in input_levels]
-    output_levels_idx = [list(all_levels).index(n) for n in output_levels]
-    mapping_levels_idx = [list(all_levels).index(n) for n in mapping_levels]
+    from_levels = get_dimension_levels(var)
+    from_level_names = [x[0] for x in from_levels]
 
-    map_dict = {}
-    for row in product(*all_levels.values()):
-        key_map = tuple(row[i] for i in mapping_levels_idx)
-        val_map = s_map.get(key_map)
+    # determine out from difference (in - map)
+    to_levels = [(k, v) for k, v in map_levels if k not in from_level_names]
+    to_levels_names = [x[0] for x in to_levels]
+    to_levels_values = [x[1] for x in to_levels]
+
+    to_is_multindex = len(to_levels) > 1
+    if not to_levels:  # aggregation to scalar
+        to_levels = [(None, [None])]
+
+    if to_is_multindex:
+        return pd.MultiIndex.from_product(to_levels_values, names=to_levels_names)
+    else:
+        return pd.Index(to_levels_values[0], name=to_levels_names[0])
+
+
+def align_map(
+    var: Union[DataFrame, Series, Index, MultiIndex, float],
+    map: Series,
+    out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]],
+) -> Mapping[Tuple[F, T], float]:
+
+    map_levels = get_dimension_levels(map)
+    map_is_multindex = is_multindex(map)
+
+    from_levels = get_dimension_levels(var)
+    from_is_multindex = is_multindex(var)
+
+    to_levels = get_dimension_levels(out)
+    to_is_multindex = is_multindex(out)
+
+    all_levels = []
+    for n, items in from_levels:
+        if n in dict(to_levels):
+            continue
+        all_levels.append((n, items))
+    for n, items in to_levels:
+        all_levels.append((n, items))
+
+    # create indices mapping
+    all_levels_names = [x[0] for x in all_levels]
+    all_levels_values = [x[1] for x in all_levels]
+    from_level_idcs = [all_levels_names.index(n) for n, _ in from_levels]
+    to_level_idcs = [all_levels_names.index(n) for n, _ in to_levels]
+    # this also ensures that map <= (from | to)
+    map_level_idcs = [all_levels_names.index(n) for n, _ in map_levels]
+
+    def get_key(row, indices, is_multindex):
+        key = tuple(row[i] for i in indices)
+        if not is_multindex:
+            assert len(indices) == 1
+            key = key[0]
+        return key
+
+    result = {}
+    for row in product(*all_levels_values):
+        key_map = get_key(row, map_level_idcs, map_is_multindex)
+        val_map = map.get(key_map)
         if is_na(val_map):
             continue
 
-        key_in = tuple(row[i] for i in input_levels_idx)
-        key_out = tuple(row[i] for i in output_levels_idx)
+        key_from = get_key(row, from_level_idcs, from_is_multindex)
+        key_to = get_key(row, to_level_idcs, to_is_multindex)
 
-        key = (key_in, key_out)
-        map_dict[key] = val_map
+        key = (key_from, key_to)
+        result[key] = val_map
 
-    result = pd.Series(map_dict)
-    result.index.names = list(mapping_levels)
+    result = pd.Series(result)
+    result.index.names = ["dimensions_from", "dimensions_to"]
 
     return result
 
@@ -79,40 +128,10 @@ def apply_map_df(
     as_int=False,
 ):
 
-    logging.debug("=======================")
-
-    s_var = as_multi_index(s_var)
-    logging.debug(f"\ns_var:\n{s_var}\n{vtype}")
-
-    if isinstance(s_map, pd.Index):
-        # all value 1
-        s_map = pd.Series(1, index=s_map)
-
-    logging.debug(f"\ns_map:\n{s_map}")
-
     if i_out is None:
-        i_out = get_i_out(s_var, s_map)
-
-    # i_out_single_index = not isinstance(i_out, pd.MultiIndex)
-
-    i_out = as_multi_index(i_out)
-
-    logging.debug(f"\ni_out:\n{i_out}")
+        i_out = get_idx_out(s_var, s_map)
 
     s_map_ft = align_map(s_var, s_map, i_out)
-
-    logging.debug(f"\ns_map_ft:\n{s_map_ft}")
-
-    if s_size_f is None:
-        s_size_f = group_idx_first(s_map_ft)
-    s_size_f = as_multi_index(s_size_f)
-    logging.debug(f"\ns_size_f:\n{s_size_f}")
-
-    if s_size_t is None:
-        s_size_t = group_idx_second(s_map_ft)
-    s_size_t = as_multi_index(s_size_t)
-
-    logging.debug(f"\ns_size_t:\n{s_size_t}")
 
     result = apply_map(
         vtype=vtype,
@@ -126,9 +145,5 @@ def apply_map_df(
 
     result = pd.Series(result)
     result.index.names = i_out.names
-
-    # TODO: why is this not required?
-    # if i_out_single_index:
-    #    result = as_single_index(result)
 
     return result

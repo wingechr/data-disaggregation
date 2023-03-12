@@ -91,10 +91,24 @@ def apply_map(
     as_int: bool = False,
 ) -> Mapping[T, V]:
 
+    # sanity check
+    
     result = {}
 
     size_f = size_f or group_idx_first(map)
     size_t = size_t or group_idx_second(map)
+
+    
+    def _values(x):
+        # TODO
+        if isinstance(x, dict):
+            return x.values()
+        else: # series
+            return x.values
+
+    assert all(v >= 0 for v in _values(map))
+    assert all(v > 0 for v in _values(size_f))
+    assert all(v > 0 for v in _values(size_t))
 
     groups = get_groups(vtype, var, map, size_f)
 

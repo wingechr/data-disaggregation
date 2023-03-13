@@ -61,7 +61,6 @@ def get_groups(
     map: Mapping[Tuple[F, T], float],
     size_f: Mapping[F, float],
 ) -> Mapping[T, Tuple[V, float]]:
-
     groups = {}
 
     for (f, t), w in map.items():
@@ -90,7 +89,6 @@ def apply_map(
     threshold: float = 0.0,
     as_int: bool = False,
 ) -> Mapping[T, V]:
-
     result = {}
 
     size_f = size_f or group_idx_first(map)

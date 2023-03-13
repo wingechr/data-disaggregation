@@ -65,7 +65,6 @@ def align_map(
     map: Series,
     out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]],
 ) -> Mapping[Tuple[F, T], float]:
-
     map_levels = get_dimension_levels(map)
     map_is_multindex = is_multindex(map)
 
@@ -127,7 +126,6 @@ def apply_map_df(
     threshold=0,
     as_int=False,
 ):
-
     if i_out is None:
         i_out = get_idx_out(s_var, s_map)
 

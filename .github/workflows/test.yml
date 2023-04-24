@@ -25,4 +25,8 @@ jobs:
           conda install -q -y -c conda-forge tox
           conda create -q -y -n py37 python=3.7
           conda create -q -y -n py311 python=3.11
-      - run: conda run tox # --parallel
+      - run: |
+          export PY37_PATH=$CONDA/envs/py37/bin
+          export PY311_PATH=$CONDA/envs/py311/bin
+          export PATH=$PATH:$PY37_PATH:$PY311_PATH
+          conda run tox # --parallel

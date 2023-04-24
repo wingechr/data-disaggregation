@@ -18,6 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: testenv
       - run: |
           conda config --system --set changeps1 False  # fixes conda: UnicodeEncodeError in windows
           conda install -q -y -c conda-forge tox

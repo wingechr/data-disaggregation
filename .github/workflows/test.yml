@@ -25,4 +25,4 @@ jobs:
           conda install -q -y -c conda-forge tox
           conda create -q -y -n py37 python=3.7
           conda create -q -y -n py311 python=3.11
-      - run: tox # --parallel
+      - run: conda run tox # --parallel

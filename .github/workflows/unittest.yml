@@ -4,23 +4,21 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   run-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.11']
+        python-version: ["3.6", "3.11"]
     steps:
-    - uses: actions/checkout@v2
-    - name: set up python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: install dependencies
-      run: |
-        cd ${{ github.workspace }}
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-    - name: run unittests
-      run: python -m unittest
+      - uses: actions/checkout@v2
+      - name: set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: install dependencies
+        run: python setup.py install
+      - name: run unittests
+        run: python -m unittest

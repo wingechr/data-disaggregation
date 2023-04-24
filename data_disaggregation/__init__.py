@@ -1,8 +1,13 @@
 __version__ = "0.8.0"
 
-from .base import apply_map
-from .dataframe import apply_map_df
-from .vartype import VarTypeCategorical, VarTypeMetric, VarTypeMetricExt, VarTypeOrdinal
+from .base import (
+    VarTypeCategorical,
+    VarTypeMetric,
+    VarTypeMetricExt,
+    VarTypeOrdinal,
+    apply_map,
+    apply_map_df,
+)
 
 __all__ = [
     "VarTypeCategorical",

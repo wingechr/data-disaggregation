@@ -44,11 +44,23 @@ Helper to create the mapping
 
 """
 
-from typing import Mapping, Tuple, TypeVar
+from abc import ABC
+from itertools import product
+from typing import List, Mapping, Optional, Tuple, TypeVar, Union
 
-from . import vartype
+import pandas as pd
+from pandas import DataFrame, Index, MultiIndex, Series
+
+from . import utils
 from .utils import group_idx_first, group_idx_second, is_na
-from .vartype import VarTypeBase
+
+F = TypeVar("F")
+T = TypeVar("T")
+V = TypeVar("V")
+
+
+# from .vartype import VarTypeBase
+
 
 F = TypeVar("F")
 T = TypeVar("T")
@@ -56,7 +68,7 @@ V = TypeVar("V")
 
 
 def get_groups(
-    vtype: VarTypeBase,
+    vtype: "VarTypeBase",
     var: Mapping[F, V],
     map: Mapping[Tuple[F, T], float],
     size_f: Mapping[F, float],
@@ -70,7 +82,7 @@ def get_groups(
             continue
 
         #  scale extensive => intensive
-        if vtype == vartype.VarTypeMetricExt:
+        if vtype == VarTypeMetricExt:
             v /= size_f[f]
 
         if t not in groups:
@@ -81,7 +93,7 @@ def get_groups(
 
 
 def apply_map(
-    vtype: VarTypeBase,
+    vtype: "VarTypeBase",
     var: Mapping[F, V],
     map: Mapping[Tuple[F, T], float],
     size_f: Mapping[F, float] = None,
@@ -125,13 +137,217 @@ def apply_map(
         v = vtype.weighted_aggregate(vws)
 
         #  re-scale intensive => extensive
-        if vtype == vartype.VarTypeMetricExt:
+        if vtype == VarTypeMetricExt:
             v *= size_t[t]
 
         result[t] = v
 
     # rounding
-    if as_int and issubclass(vtype, vartype.VarTypeMetric):
+    if as_int and issubclass(vtype, VarTypeMetric):
         result = dict((t, round(v)) for t, v in result.items())
 
     return result
+
+
+def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
+    if isinstance(x, (int, float)):
+        return False
+    if isinstance(x, (DataFrame, Series)):
+        x = x.index
+    return isinstance(x, MultiIndex)
+
+
+def get_dimension_levels(
+    x: Union[DataFrame, Series, Index, MultiIndex, float]
+) -> List[Tuple[str, List]]:
+    if isinstance(x, (int, float)):
+        # scalar: dummy dimension
+        return [(None, [None])]
+
+    if isinstance(x, (DataFrame, Series)):
+        x = x.index
+
+    # names must be unique
+    assert len(x.names) == len(set(x.names))
+
+    if isinstance(x, MultiIndex):
+        return list(zip(x.names, x.levels))
+    else:
+        return [(x.name, x.values)]
+
+
+def get_idx_out(var: Union[DataFrame, Series, Index, MultiIndex, float], map: Series):
+    map_levels = get_dimension_levels(map)
+
+    from_levels = get_dimension_levels(var)
+    from_level_names = [x[0] for x in from_levels]
+
+    # determine out from difference (in - map)
+    to_levels = [(k, v) for k, v in map_levels if k not in from_level_names]
+    to_levels_names = [x[0] for x in to_levels]
+    to_levels_values = [x[1] for x in to_levels]
+
+    to_is_multindex = len(to_levels) > 1
+    if not to_levels:  # aggregation to scalar
+        to_levels = [(None, [None])]
+
+    if to_is_multindex:
+        return pd.MultiIndex.from_product(to_levels_values, names=to_levels_names)
+    else:
+        return pd.Index(to_levels_values[0], name=to_levels_names[0])
+
+
+def align_map(
+    var: Union[DataFrame, Series, Index, MultiIndex, float],
+    map: Series,
+    out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]],
+) -> Mapping[Tuple[F, T], float]:
+    map_levels = get_dimension_levels(map)
+    map_is_multindex = is_multindex(map)
+
+    from_levels = get_dimension_levels(var)
+    from_is_multindex = is_multindex(var)
+
+    to_levels = get_dimension_levels(out)
+    to_is_multindex = is_multindex(out)
+
+    all_levels = []
+    for n, items in from_levels:
+        if n in dict(to_levels):
+            continue
+        all_levels.append((n, items))
+    for n, items in to_levels:
+        all_levels.append((n, items))
+
+    # create indices mapping
+    all_levels_names = [x[0] for x in all_levels]
+    all_levels_values = [x[1] for x in all_levels]
+    from_level_idcs = [all_levels_names.index(n) for n, _ in from_levels]
+    to_level_idcs = [all_levels_names.index(n) for n, _ in to_levels]
+    # this also ensures that map <= (from | to)
+    map_level_idcs = [all_levels_names.index(n) for n, _ in map_levels]
+
+    def get_key(row, indices, is_multindex):
+        key = tuple(row[i] for i in indices)
+        if not is_multindex:
+            assert len(indices) == 1
+            key = key[0]
+        return key
+
+    result = {}
+    for row in product(*all_levels_values):
+        key_map = get_key(row, map_level_idcs, map_is_multindex)
+        val_map = map.get(key_map)
+        if is_na(val_map):
+            continue
+
+        key_from = get_key(row, from_level_idcs, from_is_multindex)
+        key_to = get_key(row, to_level_idcs, to_is_multindex)
+
+        key = (key_from, key_to)
+        result[key] = val_map
+
+    result = pd.Series(result)
+    result.index.names = ["dimensions_from", "dimensions_to"]
+
+    return result
+
+
+def apply_map_df(
+    vtype,
+    s_var,
+    s_map,
+    i_out=None,
+    s_size_f=None,
+    s_size_t=None,
+    threshold=0,
+    as_int=False,
+):
+    if i_out is None:
+        i_out = get_idx_out(s_var, s_map)
+
+    s_map_ft = align_map(s_var, s_map, i_out)
+
+    result = apply_map(
+        vtype=vtype,
+        var=s_var,
+        map=s_map_ft,
+        size_f=s_size_f,
+        size_t=s_size_t,
+        threshold=threshold,
+        as_int=as_int,
+    )
+
+    result = pd.Series(result)
+    result.index.names = i_out.names
+
+    return result
+
+
+class VarTypeBase(ABC):
+    @classmethod
+    def weighted_aggregate(cls, data):
+        """aggregation
+
+        Args:
+            data (list): non empty list of (value, weight) pairs
+
+        Returns
+            aggregated value
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def apply_map(cls, *args, **kwargs):
+        return apply_map(cls, *args, **kwargs)
+
+    @classmethod
+    def apply_map_df(cls, *args, **kwargs):
+        return apply_map_df(cls, *args, **kwargs)
+
+
+class VarTypeCategorical(VarTypeBase):
+    """
+    Examples: Regional Codes
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_mode(data)
+
+
+class VarTypeOrdinal(VarTypeCategorical):
+    """
+    Values can be sorted in a meaningful way
+    Usually, that means using numerical codes that
+    do not represent a metric distance, liek a likert scale
+
+    Examples: [1 = "a little", 2 = "somewhat", 3 = "a lot"]
+
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_median(data)
+
+
+class VarTypeMetric(VarTypeBase):
+    """
+    * Values can be calculated by linear combinations
+    * Examples: height, temperature, density
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_sum(data)
+
+
+class VarTypeMetricExt(VarTypeMetric):
+    """
+    Values are extensive, i.e. they are can be transformed into intensive
+    by dividing by domain size
+
+    * Examples: population, energy production
+    """
+
+    pass

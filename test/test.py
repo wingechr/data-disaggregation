@@ -3,10 +3,13 @@ from unittest import TestCase
 
 import pandas as pd
 
-from data_disaggregation import vartype
-from data_disaggregation.base import apply_map
-from data_disaggregation.dataframe import (
+from data_disaggregation.base import (
+    VarTypeCategorical,
+    VarTypeMetric,
+    VarTypeMetricExt,
+    VarTypeOrdinal,
     align_map,
+    apply_map,
     apply_map_df,
     get_dimension_levels,
     is_multindex,
@@ -143,22 +146,22 @@ class TestBase(TestCase):
         return apply_map(vtype=vtype, var=var, map=map, as_int=True)
 
     def test_example_type_categorical(self):
-        res = self.get_example(vartype.VarTypeCategorical)
+        res = self.get_example(VarTypeCategorical)
         for k, v in {"D": 10, "E": 30, "F": 5}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_ordinal(self):
-        res = self.get_example(vartype.VarTypeOrdinal)
+        res = self.get_example(VarTypeOrdinal)
         for k, v in {"D": 10, "E": 30, "F": 10}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric(self):
-        res = self.get_example(vartype.VarTypeMetric)
+        res = self.get_example(VarTypeMetric)
         for k, v in {"D": 10, "E": 30, "F": 12}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric_ext(self):
-        res = self.get_example(vartype.VarTypeMetricExt)
+        res = self.get_example(VarTypeMetricExt)
         for k, v in {"D": round(3.33333333), "E": 20, "F": round(21.6666667)}.items():
             self.assertEqual(v, res[k])
 
@@ -208,22 +211,22 @@ class TestDataframe(TestCase):
         )
 
     def test_example_type_categorical(self):
-        res = self.get_example(vartype.VarTypeCategorical)
+        res = self.get_example(VarTypeCategorical)
         for k, v in {"D": 10, "E": 30, "F": 5}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_ordinal(self):
-        res = self.get_example(vartype.VarTypeOrdinal)
+        res = self.get_example(VarTypeOrdinal)
         for k, v in {"D": 10, "E": 30, "F": 10}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric(self):
-        res = self.get_example(vartype.VarTypeMetric)
+        res = self.get_example(VarTypeMetric)
         for k, v in {"D": 10, "E": 30, "F": 12}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric_ext(self):
-        res = self.get_example(vartype.VarTypeMetricExt)
+        res = self.get_example(VarTypeMetricExt)
         for k, v in {"D": round(3.333), "E": 20, "F": round(21.667)}.items():
             self.assertEqual(v, res[k])
 
@@ -231,7 +234,7 @@ class TestDataframe(TestCase):
 class TestBaseExamples(TestCase):
     def test_aggregate_ext(self):
         res = apply_map(
-            vtype=vartype.VarTypeMetricExt,
+            vtype=VarTypeMetricExt,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
             map={(1, None): 10, (2, None): 20, (3, None): 30},
@@ -241,7 +244,7 @@ class TestBaseExamples(TestCase):
 
     def test_aggregate_int(self):
         res = apply_map(
-            vtype=vartype.VarTypeMetric,
+            vtype=VarTypeMetric,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
             map={(1, None): 10, (2, None): 20, (3, None): 30},
@@ -251,7 +254,7 @@ class TestBaseExamples(TestCase):
     def test_disaggregate_thres(self):
         """case: rasterize a shape to partially overlapping cells"""
         res = apply_map(
-            vtype=vartype.VarTypeMetricExt,
+            vtype=VarTypeMetricExt,
             var={None: 100},
             map={
                 (None, "00"): 0.51,
@@ -272,7 +275,7 @@ class TestBaseExamples(TestCase):
     def test_todo(self):
         """case: split a variable differently in different years"""
         res = apply_map(
-            vtype=vartype.VarTypeMetricExt,
+            vtype=VarTypeMetricExt,
             var={
                 ("v1", "t1"): 10,
                 ("v2", "t1"): 11,

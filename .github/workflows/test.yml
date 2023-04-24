@@ -19,7 +19,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          activate-environment: testenv
+          auto-activate-base: true
+          activate-environment: ""
       - run: |
           conda config --system --set changeps1 False  # fixes conda: UnicodeEncodeError in windows
           conda install -q -y -c conda-forge tox
@@ -29,4 +30,4 @@ jobs:
           export PY37_PATH=$CONDA/envs/py37/bin
           export PY311_PATH=$CONDA/envs/py311/bin
           export PATH=$PATH:$PY37_PATH:$PY311_PATH
-          conda run tox # --parallel
+          tox # --parallel

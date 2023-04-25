@@ -1,5 +1,7 @@
 from typing import Callable, Mapping
 
+import pandas as pd
+
 
 def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     """simple group sum
@@ -104,3 +106,15 @@ def group_idx_first(items: Mapping) -> Mapping:
 
 def group_idx_second(items: Mapping) -> Mapping:
     return group_sum(items, lambda k: k[1])
+
+
+def is_list(x):
+    return isinstance(x, (list, tuple, set, pd.Index))
+
+
+def is_mapping(x):
+    return isinstance(x, (dict, pd.Series, pd.DataFrame))
+
+
+def is_scalar(x):
+    return not (is_list(x) or is_mapping(x))

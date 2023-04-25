@@ -4,18 +4,20 @@ from unittest import TestCase
 import pandas as pd
 
 from data_disaggregation.base import (
-    VarTypeCategorical,
-    VarTypeMetric,
-    VarTypeMetricExt,
-    VarTypeOrdinal,
+    VT_Nominal,
+    VT_Numeric,
+    VT_NumericExt,
+    VT_Ordinal,
     align_map,
-    apply_map,
-    apply_map_df,
+    disagg,
     get_dimension_levels,
     is_multindex,
 )
 from data_disaggregation.utils import (
     group_sum,
+    is_list,
+    is_mapping,
+    is_scalar,
     weighted_median,
     weighted_mode,
     weighted_sum,
@@ -109,6 +111,33 @@ class TestUtils(TestCase):
         res = align_map(d1, pd.Series(1, index=d1), d0)
         self.assertEqual(res[(1, None)], 1)
 
+    def test_is_scalar(self):
+        for x in [1, None, "xyz", True]:
+            res = (is_scalar(x), is_list(x), is_mapping(x))
+            self.assertEqual(res, (True, False, False), x)
+
+    def test_is_list(self):
+        for x in [
+            [],
+            (1, 2, 3),
+            pd.MultiIndex.from_product([[1, 2]]),
+            pd.Index(["a", "b"]),
+            set([1, 2]),
+        ]:
+            res = (is_scalar(x), is_list(x), is_mapping(x))
+            self.assertEqual(res, (False, True, False), x)
+
+    def test_is_mapping(self):
+        for x in [
+            {},
+            pd.Series(dtype=float),
+            pd.Series({1: 1}),
+            pd.DataFrame(dtype=float),
+            pd.DataFrame({"a": [1, 2, 3]}),
+        ]:
+            res = (is_scalar(x), is_list(x), is_mapping(x))
+            self.assertEqual(res, (False, False, True), x)
+
 
 class TestBase(TestCase):
     """"""
@@ -143,25 +172,25 @@ class TestBase(TestCase):
 
         var = {"a": 5, "b": 10, "c": 30}
 
-        return apply_map(vtype=vtype, var=var, map=map, as_int=True)
+        return disagg(vtype=vtype, var=var, map=map, as_int=True)
 
     def test_example_type_categorical(self):
-        res = self.get_example(VarTypeCategorical)
+        res = self.get_example(VT_Nominal)
         for k, v in {"D": 10, "E": 30, "F": 5}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_ordinal(self):
-        res = self.get_example(VarTypeOrdinal)
+        res = self.get_example(VT_Ordinal)
         for k, v in {"D": 10, "E": 30, "F": 10}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric(self):
-        res = self.get_example(VarTypeMetric)
+        res = self.get_example(VT_Numeric)
         for k, v in {"D": 10, "E": 30, "F": 12}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric_ext(self):
-        res = self.get_example(VarTypeMetricExt)
+        res = self.get_example(VT_NumericExt)
         for k, v in {"D": round(3.33333333), "E": 20, "F": round(21.6666667)}.items():
             self.assertEqual(v, res[k])
 
@@ -203,58 +232,58 @@ class TestDataframe(TestCase):
         s_var = pd.Series({"a": 5, "b": 10, "c": 30})
         s_var.index.names = ["d1"]
 
-        return apply_map_df(
-            s_map=s_map,
-            s_var=s_var,
+        return disagg(
+            map=s_map,
+            var=s_var,
             vtype=vtype,
             as_int=True,
         )
 
     def test_example_type_categorical(self):
-        res = self.get_example(VarTypeCategorical)
+        res = self.get_example(VT_Nominal)
         for k, v in {"D": 10, "E": 30, "F": 5}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_ordinal(self):
-        res = self.get_example(VarTypeOrdinal)
+        res = self.get_example(VT_Ordinal)
         for k, v in {"D": 10, "E": 30, "F": 10}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric(self):
-        res = self.get_example(VarTypeMetric)
+        res = self.get_example(VT_Numeric)
         for k, v in {"D": 10, "E": 30, "F": 12}.items():
             self.assertEqual(v, res[k])
 
     def test_example_type_metric_ext(self):
-        res = self.get_example(VarTypeMetricExt)
+        res = self.get_example(VT_NumericExt)
         for k, v in {"D": round(3.333), "E": 20, "F": round(21.667)}.items():
             self.assertEqual(v, res[k])
 
 
 class TestBaseExamples(TestCase):
     def test_aggregate_ext(self):
-        res = apply_map(
-            vtype=VarTypeMetricExt,
+        res = disagg(
+            vtype=VT_NumericExt,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
             map={(1, None): 10, (2, None): 20, (3, None): 30},
             threshold=0.5,
         )
-        self.assertAlmostEqual(res[None], 1 + 1 + 10)
+        self.assertAlmostEqual(res, 1 + 1 + 10)
 
     def test_aggregate_int(self):
-        res = apply_map(
-            vtype=VarTypeMetric,
+        res = disagg(
+            vtype=VT_Numeric,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
             map={(1, None): 10, (2, None): 20, (3, None): 30},
         )
-        self.assertAlmostEqual(res[None], 1 * 10 / 60 + 1 * 20 / 60 + 10 * 30 / 60)
+        self.assertAlmostEqual(res, 1 * 10 / 60 + 1 * 20 / 60 + 10 * 30 / 60)
 
     def test_disaggregate_thres(self):
         """case: rasterize a shape to partially overlapping cells"""
-        res = apply_map(
-            vtype=VarTypeMetricExt,
+        res = disagg(
+            vtype=VT_NumericExt,
             var={None: 100},
             map={
                 (None, "00"): 0.51,
@@ -274,8 +303,8 @@ class TestBaseExamples(TestCase):
 
     def test_todo(self):
         """case: split a variable differently in different years"""
-        res = apply_map(
-            vtype=VarTypeMetricExt,
+        res = disagg(
+            vtype=VT_NumericExt,
             var={
                 ("v1", "t1"): 10,
                 ("v2", "t1"): 11,
@@ -300,3 +329,6 @@ class TestBaseExamples(TestCase):
         self.assertEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
         self.assertEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
         self.assertEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)
+
+    def test_ex_1(self):
+        pass

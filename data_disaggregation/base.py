@@ -52,23 +52,87 @@ import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from . import utils
-from .utils import group_idx_first, group_idx_second, is_na
+from .utils import (
+    group_idx_first,
+    group_idx_second,
+    is_list,
+    is_mapping,
+    is_na,
+    is_scalar,
+)
 
 F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
 
 
-# from .vartype import VarTypeBase
+class VT_Base(ABC):
+    @classmethod
+    def weighted_aggregate(cls, data):
+        """aggregation
+
+        Args:
+            data (list): non empty list of (value, weight) pairs
+
+        Returns
+            aggregated value
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def disagg(cls, *args, **kwargs):
+        return disagg(cls, *args, **kwargs)
 
 
-F = TypeVar("F")
-T = TypeVar("T")
-V = TypeVar("V")
+class VT_Nominal(VT_Base):
+    """
+    Examples: Regional Codes
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_mode(data)
+
+
+class VT_Ordinal(VT_Nominal):
+    """
+    Values can be sorted in a meaningful way
+    Usually, that means using numerical codes that
+    do not represent a metric distance, liek a likert scale
+
+    Examples: [1 = "a little", 2 = "somewhat", 3 = "a lot"]
+
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_median(data)
+
+
+class VT_Numeric(VT_Base):
+    """
+    * Values can be calculated by linear combinations
+    * Examples: height, temperature, density
+    """
+
+    @classmethod
+    def weighted_aggregate(cls, data):
+        return utils.weighted_sum(data)
+
+
+class VT_NumericExt(VT_Numeric):
+    """
+    Values are extensive, i.e. they are can be transformed into intensive
+    by dividing by domain size
+
+    * Examples: population, energy production
+    """
+
+    pass
 
 
 def get_groups(
-    vtype: "VarTypeBase",
+    vtype: "VT_Base",
     var: Mapping[F, V],
     map: Mapping[Tuple[F, T], float],
     size_f: Mapping[F, float],
@@ -82,7 +146,7 @@ def get_groups(
             continue
 
         #  scale extensive => intensive
-        if vtype == VarTypeMetricExt:
+        if vtype == VT_NumericExt:
             v /= size_f[f]
 
         if t not in groups:
@@ -90,63 +154,6 @@ def get_groups(
         groups[t].append((v, w))
 
     return groups
-
-
-def apply_map(
-    vtype: "VarTypeBase",
-    var: Mapping[F, V],
-    map: Mapping[Tuple[F, T], float],
-    size_f: Mapping[F, float] = None,
-    size_t: Mapping[T, float] = None,
-    threshold: float = 0.0,
-    as_int: bool = False,
-) -> Mapping[T, V]:
-    # sanity check
-
-    result = {}
-
-    size_f = size_f or group_idx_first(map)
-    size_t = size_t or group_idx_second(map)
-
-    def _values(x):
-        # TODO
-        if isinstance(x, dict):
-            return x.values()
-        else:  # series
-            return x.values
-
-    assert all(v >= 0 for v in _values(map))
-    assert all(v > 0 for v in _values(size_f))
-    assert all(v > 0 for v in _values(size_t))
-
-    groups = get_groups(vtype, var, map, size_f)
-
-    for t, vws in groups.items():
-        # weights sum
-        sumw = sum(w for _, w in vws)
-
-        # drop result?
-        if threshold:
-            if (sumw / size_t[t]) < threshold:
-                continue
-
-        # normalize weights
-        vws = [(v, w / sumw) for v, w in vws]
-
-        # aggregate
-        v = vtype.weighted_aggregate(vws)
-
-        #  re-scale intensive => extensive
-        if vtype == VarTypeMetricExt:
-            v *= size_t[t]
-
-        result[t] = v
-
-    # rounding
-    if as_int and issubclass(vtype, VarTypeMetric):
-        result = dict((t, round(v)) for t, v in result.items())
-
-    return result
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -253,101 +260,109 @@ def align_map(
     return result
 
 
-def apply_map_df(
-    vtype,
-    s_var,
-    s_map,
-    i_out=None,
-    s_size_f=None,
-    s_size_t=None,
-    threshold=0,
-    as_int=False,
-):
-    if i_out is None:
-        i_out = get_idx_out(s_var, s_map)
+def apply_map(
+    vtype: "VT_Base",
+    var: Mapping[F, V],
+    map: Mapping[Tuple[F, T], float],
+    size_f: Mapping[F, float] = None,
+    size_t: Mapping[T, float] = None,
+    threshold: float = 0.0,
+    as_int: bool = False,
+) -> Mapping[T, V]:
+    # sanity check
 
-    s_map_ft = align_map(s_var, s_map, i_out)
+    result = {}
 
-    result = apply_map(
-        vtype=vtype,
-        var=s_var,
-        map=s_map_ft,
-        size_f=s_size_f,
-        size_t=s_size_t,
-        threshold=threshold,
-        as_int=as_int,
-    )
+    size_f = size_f or group_idx_first(map)
+    size_t = size_t or group_idx_second(map)
 
-    result = pd.Series(result)
-    result.index.names = i_out.names
+    def _values(x):
+        # TODO
+        if isinstance(x, dict):
+            return x.values()
+        else:  # series
+            return x.values
+
+    assert all(v >= 0 for v in _values(map))
+    assert all(v > 0 for v in _values(size_f))
+    assert all(v > 0 for v in _values(size_t))
+
+    groups = get_groups(vtype, var, map, size_f)
+
+    for t, vws in groups.items():
+        # weights sum
+        sumw = sum(w for _, w in vws)
+
+        # drop result?
+        if threshold:
+            if (sumw / size_t[t]) < threshold:
+                continue
+
+        # normalize weights
+        vws = [(v, w / sumw) for v, w in vws]
+
+        # aggregate
+        v = vtype.weighted_aggregate(vws)
+
+        #  re-scale intensive => extensive
+        if vtype == VT_NumericExt:
+            v *= size_t[t]
+
+        result[t] = v
+
+    # rounding
+    if as_int and issubclass(vtype, VT_Numeric):
+        result = dict((t, round(v)) for t, v in result.items())
 
     return result
 
 
-class VarTypeBase(ABC):
-    @classmethod
-    def weighted_aggregate(cls, data):
-        """aggregation
+def disagg(
+    vtype: VT_Base,
+    var: Mapping[F, V],
+    map: Mapping[Tuple[F, T], float],
+    size_f: Mapping[F, float] = None,
+    size_t: Mapping[T, float] = None,
+    threshold: float = 0.0,
+    as_int: bool = False,
+) -> Mapping[T, V]:
+    # make sure var is a mapping
+    if is_scalar(var):
+        var = {None: var}
+    elif is_list(var):
+        var = dict(enumerate(var))
+    if not is_mapping(var):
+        raise ValueError(
+            "variable must be a dict like mapping "
+            "or something that can be converted into one"
+        )
 
-        Args:
-            data (list): non empty list of (value, weight) pairs
+    if isinstance(var, pd.Series):
+        if size_t:
+            i_out = size_t.index
+        else:
+            i_out = get_idx_out(var, map)
+        res_names = i_out.names
+        map = align_map(var, map, i_out)
+    else:
+        res_names = None
 
-        Returns
-            aggregated value
-        """
-        raise NotImplementedError()
+    result = apply_map(
+        vtype=vtype,
+        var=var,
+        map=map,
+        size_f=size_f,
+        size_t=size_t,
+        threshold=threshold,
+        as_int=as_int,
+    )
 
-    @classmethod
-    def apply_map(cls, *args, **kwargs):
-        return apply_map(cls, *args, **kwargs)
+    # result as series
+    if res_names:
+        result = pd.Series(result).rename_axis(res_names)
 
-    @classmethod
-    def apply_map_df(cls, *args, **kwargs):
-        return apply_map_df(cls, *args, **kwargs)
+    # result as scalar
+    if set(result.keys()) == set([None]):
+        result = result[None]
 
-
-class VarTypeCategorical(VarTypeBase):
-    """
-    Examples: Regional Codes
-    """
-
-    @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_mode(data)
-
-
-class VarTypeOrdinal(VarTypeCategorical):
-    """
-    Values can be sorted in a meaningful way
-    Usually, that means using numerical codes that
-    do not represent a metric distance, liek a likert scale
-
-    Examples: [1 = "a little", 2 = "somewhat", 3 = "a lot"]
-
-    """
-
-    @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_median(data)
-
-
-class VarTypeMetric(VarTypeBase):
-    """
-    * Values can be calculated by linear combinations
-    * Examples: height, temperature, density
-    """
-
-    @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_sum(data)
-
-
-class VarTypeMetricExt(VarTypeMetric):
-    """
-    Values are extensive, i.e. they are can be transformed into intensive
-    by dividing by domain size
-
-    * Examples: population, energy production
-    """
-
-    pass
+    return result

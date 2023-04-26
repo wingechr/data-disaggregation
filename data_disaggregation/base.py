@@ -53,6 +53,7 @@ from .utils import (
     group_idx_first,
     group_idx_second,
     is_map,
+    is_mapping,
     is_na,
     is_subset,
     is_unique,
@@ -103,14 +104,17 @@ def apply_map(
 
     if validate:
         # validate size_f
+        assert is_mapping(size_f)
         assert is_unique(size_f)
         assert all(v > 0 for v in iter_values(size_f))
 
         # validate size_t
+        assert is_mapping(size_t)
         assert is_unique(size_t)
         assert all(v > 0 for v in iter_values(size_t))
 
         # validate var
+        assert is_mapping(var)
         assert is_unique(var)
         assert is_subset(var, size_f)
 

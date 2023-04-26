@@ -1,6 +1,7 @@
 import logging
 from unittest import TestCase
 
+import numpy as np
 import pandas as pd
 
 from data_disaggregation.classes import (
@@ -19,6 +20,7 @@ from data_disaggregation.utils import (
     group_sum,
     is_list,
     is_mapping,
+    is_na,
     is_scalar,
     weighted_median,
     weighted_mode,
@@ -53,6 +55,21 @@ class TestUtils(TestCase):
     def test_weighted_sum(self):
         res = weighted_sum([(3, 0.4), (2, 0.25), [1, 0.35]])
         self.assertAlmostEqual(res, 2.05)
+
+    def test_is_na(self):
+        for x, y in [
+            (1, False),
+            (0, False),
+            ("a", False),
+            ("", False),
+            (False, False),
+            (None, True),
+            (float("inf"), True),
+            (float("nan"), True),
+            (np.nan, True),
+            (np.NAN, True),
+        ]:
+            self.assertEqual(is_na(x), y)
 
     def test_df_utils(self):
         s = 10  # scalar

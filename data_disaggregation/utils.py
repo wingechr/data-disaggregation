@@ -1,5 +1,6 @@
 """utility functions
 """
+import math
 from typing import Callable, List, Mapping, Tuple
 
 
@@ -105,7 +106,7 @@ def group_idx_second(items: Mapping) -> Mapping:
 
 
 def is_na(x) -> bool:
-    return x is None
+    return x is None or (isinstance(x, float) and not math.isfinite(x))
 
 
 def is_scalar(x) -> bool:

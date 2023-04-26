@@ -97,7 +97,10 @@ def create_map(
     from_level_idcs = [all_levels_names.index(n) for n, _ in from_levels]
     to_level_idcs = [all_levels_names.index(n) for n, _ in to_levels]
     # this also ensures that map <= (from | to)
-    map_level_idcs = [all_levels_names.index(n) for n, _ in map_levels]
+    try:
+        map_level_idcs = [all_levels_names.index(n) for n, _ in map_levels]
+    except Exception as e:
+        raise ValueError(f"weight map cannot be created: {e}")
 
     def get_key(row, indices, is_multindex):
         key = tuple(row[i] for i in indices)

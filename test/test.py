@@ -337,7 +337,7 @@ class TestBaseExamples(TestCase):
     def test_ex_1(self):
         # create dimensions as pandas Index
         idx_month = pd.Index(["1", "2"], name="month")
-        # idx_hour = pd.Index(["11", "21", "22"], name="hour")
+        idx_hour = pd.Index(["11", "21", "22"], name="hour")
         idx_region = pd.Index(["a", "b"], name="region")
 
         # create multi dimensions as pandas MultiIndex
@@ -358,13 +358,20 @@ class TestBaseExamples(TestCase):
         # replicate weight map to a second dimension
         s_month = s_month * pd.Series(1, index=idx_region_month)
 
+        # auto aggregation => output dimension is only month
         res = VT_NumericExt.disagg(s_region, s_month)
-        print(res)
+        self.assertAlmostEqual(res["1"], 16)
 
+        # use size_t with a series (probably wrongly)
         res = VT_NumericExt.disagg(
             s_region, s_month, size_t=pd.Series(1, index=idx_region_month)
         )
-        print(res)
+        self.assertAlmostEqual(res[("a", "1")], 2)
 
+        # use size_t with index only:
         res = VT_NumericExt.disagg(s_region, s_month, size_t=idx_region_month)
-        print(res)
+        self.assertAlmostEqual(res[("a", "1")], 4)
+
+        self.assertRaises(
+            Exception, VT_NumericExt.disagg, s_region, s_month, size_t=idx_hour
+        )

@@ -122,14 +122,10 @@ def create_map(
         key = (key_from, key_to)
         result[key] = val_map
 
-        from_name = (
-            tuple(from_levels_names)
-            if len(from_levels_names) > 1
-            else from_levels_names[0]
-        )
-        to_name = (
-            tuple(to_levels_names) if len(to_levels_names) > 1 else to_levels_names[0]
-        )
+    from_name = (
+        tuple(from_levels_names) if len(from_levels_names) > 1 else from_levels_names[0]
+    )
+    to_name = tuple(to_levels_names) if len(to_levels_names) > 1 else to_levels_names[0]
 
     result = pd.Series(result).rename_axis([from_name, to_name])
 

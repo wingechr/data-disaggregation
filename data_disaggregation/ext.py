@@ -1,3 +1,5 @@
+"""extended functions, especially for pandas Series
+"""
 from itertools import product
 from typing import List, Mapping, Optional, Tuple, Union
 
@@ -6,18 +8,7 @@ from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import apply_map
 from .classes import VT, F, T, V
-from .utils import (
-    as_list,
-    as_mapping,
-    group_idx_first,
-    group_idx_second,
-    is_list,
-    is_map,
-    is_na,
-    is_subset,
-    is_unique,
-    iter_values,
-)
+from .utils import as_list, as_mapping, is_list, is_mapping, is_na
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -151,39 +142,24 @@ def disagg(
     threshold: float = 0.0,
     as_int: bool = False,
 ) -> Mapping[T, V]:
-    res_series_dtype = None
-    res_series_names = None
-
     var = as_mapping(var)
 
-    if not is_map(map):
+    if is_list(size_t):
+        idx_t = size_t
+        size_t = None
+    elif is_mapping(size_t):
+        idx_t = as_list(size_t)
+    elif size_t is None:
+        idx_t = None
+    else:
+        raise NotImplementedError()
+
+    if isinstance(map, pd.Series):
         idx_f = as_list(size_f) if size_f is not None else as_list(var)
-        idx_t = as_list(size_t) if size_t is not None else None
         map = create_map(map, idx_f, idx_t)
-
-    # validate size_f
-    if size_f is None:
-        size_f = group_idx_first(map)
-    size_f = as_mapping(size_f)
-    assert is_unique(size_f)
-    assert all(v > 0 for v in iter_values(size_f))
-
-    # validate size_t
-    if size_t is None:
-        size_t = group_idx_second(map)
-    size_t = as_mapping(size_t)
-    assert is_unique(size_t)
-    assert all(v > 0 for v in iter_values(size_t))
-
-    # validate var
-    assert is_unique(var)
-    assert is_subset(var, size_f)
-
-    # validate map
-    assert is_unique(map)
-    assert all(v >= 0 for v in iter_values(map))
-    assert is_subset([x[0] for x in map.keys()], size_f)
-    assert is_subset([x[1] for x in map.keys()], size_t)
+        res_series_names = map.index.names[1]
+    else:
+        res_series_names = getattr(idx_t, "names", None)
 
     result = apply_map(
         vtype=vtype,
@@ -195,11 +171,9 @@ def disagg(
         as_int=as_int,
     )
 
-    # todo remove checks at the end
-    assert is_subset(result, size_t)
-    assert is_unique(result)
-
     # result as series
+    res_series_dtype = getattr(var, "dtype", None)
+
     if res_series_names:
         result = pd.Series(result, dtype=res_series_dtype).rename_axis(res_series_names)
 

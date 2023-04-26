@@ -1,3 +1,5 @@
+"""utility functions
+"""
 from typing import Callable, List, Mapping, Tuple
 
 
@@ -137,6 +139,8 @@ def as_list(x) -> List:
     if is_list(x):
         return x
     elif is_mapping(x):
+        if hasattr(x, "index"):
+            return x.index
         return list(x.keys())  # TODO maybe wrap in list
     raise TypeError(x)
 

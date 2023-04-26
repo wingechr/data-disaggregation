@@ -335,4 +335,36 @@ class TestBaseExamples(TestCase):
         self.assertEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)
 
     def test_ex_1(self):
-        pass
+        # create dimensions as pandas Index
+        idx_month = pd.Index(["1", "2"], name="month")
+        # idx_hour = pd.Index(["11", "21", "22"], name="hour")
+        idx_region = pd.Index(["a", "b"], name="region")
+
+        # create multi dimensions as pandas MultiIndex
+        idx_region_month = pd.MultiIndex.from_product([idx_region, idx_month])
+        # idx_region_hour = pd.MultiIndex.from_product([idx_region, idx_hour])
+
+        # create data as pandas series over dimensions
+        # example: series over region
+        s_region = pd.Series({"a": 10, "b": 30}, index=idx_region)
+        # or just rename the index
+        # s_region = pd.Series({"a": 10, "b": 30}, dtype="pint[meter]").rename_axis(["region"])  # noqa
+        s_region = pd.Series({"a": 10, "b": 30}).rename_axis(["region"])
+
+        # create (weighted) map between dimensions (in the simple case, all weights = 1)
+        # as a series, with all dimensions in the index
+        s_month = pd.Series({"1": 2, "2": 3}, index=idx_month)
+
+        # replicate weight map to a second dimension
+        s_month = s_month * pd.Series(1, index=idx_region_month)
+
+        res = VT_NumericExt.disagg(s_region, s_month)
+        print(res)
+
+        res = VT_NumericExt.disagg(
+            s_region, s_month, size_t=pd.Series(1, index=idx_region_month)
+        )
+        print(res)
+
+        res = VT_NumericExt.disagg(s_region, s_month, size_t=idx_region_month)
+        print(res)

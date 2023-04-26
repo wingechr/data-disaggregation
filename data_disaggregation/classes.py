@@ -1,7 +1,10 @@
+"""classes and types
+"""
+
 from abc import ABC
 from typing import TypeVar
 
-from . import base, utils
+from . import ext, utils
 
 F = TypeVar("F")
 T = TypeVar("T")
@@ -23,7 +26,7 @@ class VT(ABC):
 
     @classmethod
     def disagg(cls, *args, **kwargs):
-        return base.disagg(cls, *args, **kwargs)
+        return ext.disagg(cls, *args, **kwargs)
 
 
 class VT_Nominal(VT):

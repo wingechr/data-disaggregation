@@ -1,4 +1,5 @@
-"""
+"""base code without dependencies.
+
 * a Variable is a (dict like) mapping from a Domain -> Value from a given Range
 * a Transformation maps a Variable to a a new Variable in a different Domain
 * Domains can be have multiple, nested dimensions
@@ -48,7 +49,15 @@ Helper to create the mapping
 from typing import Mapping, Tuple
 
 from .classes import VT, F, T, V, VT_Numeric, VT_NumericExt
-from .utils import is_na
+from .utils import (
+    group_idx_first,
+    group_idx_second,
+    is_map,
+    is_na,
+    is_subset,
+    is_unique,
+    iter_values,
+)
 
 
 def get_groups(
@@ -80,11 +89,38 @@ def apply_map(
     vtype: VT,
     var: Mapping[F, V],
     map: Mapping[Tuple[F, T], float],
-    size_f: Mapping[F, float],
-    size_t: Mapping[T, float],
+    size_f: Mapping[F, float] = None,
+    size_t: Mapping[T, float] = None,
     threshold: float = 0.0,
     as_int: bool = False,
+    validate=True,
 ) -> Mapping[T, V]:
+    if size_f is None:
+        size_f = group_idx_first(map)
+
+    if size_t is None:
+        size_t = group_idx_second(map)
+
+    if validate:
+        # validate size_f
+        assert is_unique(size_f)
+        assert all(v > 0 for v in iter_values(size_f))
+
+        # validate size_t
+        assert is_unique(size_t)
+        assert all(v > 0 for v in iter_values(size_t))
+
+        # validate var
+        assert is_unique(var)
+        assert is_subset(var, size_f)
+
+        # validate map
+        assert is_map(map)
+        assert is_unique(map)
+        assert all(v >= 0 for v in iter_values(map))
+        assert is_subset([x[0] for x in map.keys()], size_f)
+        assert is_subset([x[1] for x in map.keys()], size_t)
+
     result = {}
 
     groups = get_groups(vtype, var, map, size_f)
@@ -116,5 +152,10 @@ def apply_map(
     if as_int:
         assert issubclass(vtype, VT_Numeric)
         result = dict((t, round(v)) for t, v in result.items())
+
+    if validate:
+        # todo remove checks at the end
+        assert is_subset(result, size_t)
+        assert is_unique(result)
 
     return result

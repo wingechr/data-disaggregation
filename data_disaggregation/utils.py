@@ -1,6 +1,4 @@
-from typing import Callable, Mapping
-
-import pandas as pd
+from typing import Callable, List, Mapping, Tuple
 
 
 def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
@@ -28,7 +26,7 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     return res
 
 
-def weighted_sum(value_normweights):
+def weighted_sum(value_normweights: Tuple[float]) -> float:
     """get sum product
 
     Args:
@@ -43,7 +41,7 @@ def weighted_sum(value_normweights):
     return sum(v * w for v, w in value_normweights)
 
 
-def weighted_mode(value_normweights):
+def weighted_mode(value_normweights: Tuple):
     """get most common value (but by weight)
 
     Args:
@@ -60,7 +58,7 @@ def weighted_mode(value_normweights):
     return sorted(value_normweights, key=lambda vw: vw[1], reverse=True)[0][0]
 
 
-def weighted_percentile(value_normweights, p=0.5):
+def weighted_percentile(value_normweights: Tuple, p=0.5):
     """get most median (but by weight)
 
     Args:
@@ -82,7 +80,7 @@ def weighted_percentile(value_normweights, p=0.5):
     raise ValueError()
 
 
-def weighted_median(value_normweights):
+def weighted_median(value_normweights: Tuple):
     """get most median (but by weight)
 
     Args:
@@ -96,10 +94,6 @@ def weighted_median(value_normweights):
     return weighted_percentile(value_normweights, p=0.5)
 
 
-def is_na(x):
-    return x is None
-
-
 def group_idx_first(items: Mapping) -> Mapping:
     return group_sum(items, lambda k: k[0])
 
@@ -108,13 +102,63 @@ def group_idx_second(items: Mapping) -> Mapping:
     return group_sum(items, lambda k: k[1])
 
 
-def is_list(x):
-    return isinstance(x, (list, tuple, set, pd.Index))
+def is_na(x) -> bool:
+    return x is None
 
 
-def is_mapping(x):
-    return isinstance(x, (dict, pd.Series, pd.DataFrame))
+def is_scalar(x) -> bool:
+    return isinstance(x, (str, int, float, bool)) or is_na(x)
 
 
-def is_scalar(x):
-    return not (is_list(x) or is_mapping(x))
+def is_list(x) -> bool:
+    return hasattr(x, "__iter__") and not is_scalar(x) and not is_mapping(x)
+
+
+def is_mapping(x) -> bool:
+    return hasattr(x, "keys")
+
+
+def is_unique(x) -> bool:
+    x = as_list(x)
+    return len(x) == len(set(x))
+
+
+def is_subset(a, b):
+    return set(as_list(a)) <= set(as_list(b))
+
+
+def iter_values(x):
+    for k in x.keys():
+        yield x[k]
+
+
+def as_list(x) -> List:
+    # meaning: is index
+    if is_list(x):
+        return x
+    elif is_mapping(x):
+        return list(x.keys())  # TODO maybe wrap in list
+    raise TypeError(x)
+
+
+def as_mapping(x, default_val=1) -> Mapping:
+    if is_mapping(x):
+        return x
+    elif is_list(x):
+        return dict((x, 1) for k in x)
+    elif is_scalar(x):
+        return {None: x}
+    raise TypeError(x)
+
+
+def as_scalar(x):
+    if as_scalar(x):
+        return x
+    elif is_mapping(x):
+        assert set(x.keys()) == set([None])
+        return x[None]
+    raise TypeError(x)
+
+
+def is_map(map) -> bool:
+    return is_mapping(map) and all(len(k) == 2 for k in map.keys())

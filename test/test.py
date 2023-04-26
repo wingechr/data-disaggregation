@@ -3,12 +3,14 @@ from unittest import TestCase
 
 import pandas as pd
 
-from data_disaggregation.base import (
+from data_disaggregation.classes import (
     VT_Nominal,
     VT_Numeric,
     VT_NumericExt,
     VT_Ordinal,
-    align_map,
+)
+from data_disaggregation.ext import (
+    create_map,
     disagg,
     get_dimension_levels,
     is_multindex,
@@ -93,22 +95,22 @@ class TestUtils(TestCase):
         d3 = pd.Index([4], name="d3")
         d23 = pd.MultiIndex.from_product([d2, d3])
 
-        res = align_map(d1, pd.Series(1, index=d12), d2)
+        res = create_map(pd.Series(1, index=d12), d1, d2)
         self.assertEqual(res[(1, 2)], 1)
 
-        res = align_map(d1m, pd.Series(1, index=d12), d2)
+        res = create_map(pd.Series(1, index=d12), d1m, d2)
         self.assertEqual(res[((1,), 2)], 1)
 
-        res = align_map(d1m, pd.Series(1, index=d12), d2m)
+        res = create_map(pd.Series(1, index=d12), d1m, d2m)
         self.assertEqual(res[((1,), (2,))], 1)
 
-        res = align_map(d12, pd.Series(1, index=d23), d23)
+        res = create_map(pd.Series(1, index=d23), d12, d23)
         self.assertEqual(res[((1, 2), (2, 4))], 1)
 
-        res = align_map(0, pd.Series(1, index=d1), d1)
+        res = create_map(pd.Series(1, index=d1), 0, d1)
         self.assertEqual(res[(None, 1)], 1)
 
-        res = align_map(d1, pd.Series(1, index=d1), d0)
+        res = create_map(pd.Series(1, index=d1), d1, d0)
         self.assertEqual(res[(1, None)], 1)
 
     def test_is_scalar(self):
@@ -172,7 +174,9 @@ class TestBase(TestCase):
 
         var = {"a": 5, "b": 10, "c": 30}
 
-        return disagg(vtype=vtype, var=var, map=map, as_int=True)
+        return disagg(
+            vtype=vtype, var=var, map=map, as_int=issubclass(vtype, VT_Numeric)
+        )
 
     def test_example_type_categorical(self):
         res = self.get_example(VT_Nominal)
@@ -236,7 +240,7 @@ class TestDataframe(TestCase):
             map=s_map,
             var=s_var,
             vtype=vtype,
-            as_int=True,
+            as_int=issubclass(vtype, VT_Numeric),
         )
 
     def test_example_type_categorical(self):

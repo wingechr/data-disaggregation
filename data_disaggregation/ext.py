@@ -24,9 +24,8 @@ def get_dimension_levels(
 ) -> List[Tuple[str, List]]:
     if isinstance(x, (int, float)):
         # scalar: dummy dimension
-        return [(None, [None])]
-
-    if isinstance(x, (DataFrame, Series)):
+        x = Index([None], name=None)
+    elif isinstance(x, (DataFrame, Series)):
         x = x.index
 
     # names must be unique
@@ -140,8 +139,8 @@ def disagg(
     vtype: VT,
     var: Mapping[F, V],
     map: Union[Mapping[Tuple[F, T], float], Series],
-    size_t: Mapping[T, float] = None,
-    size_f: Mapping[F, float] = None,
+    dim_out: Mapping[T, float] = None,
+    dim_in: Mapping[F, float] = None,
     threshold: float = 0.0,
     as_int: bool = False,
 ) -> Mapping[T, V]:
@@ -158,29 +157,29 @@ def disagg(
     """
     var = as_mapping(var)
 
-    if is_list(size_t):
-        idx_t = size_t
-        size_t = None
-    elif is_mapping(size_t):
-        idx_t = as_list(size_t)
-    elif size_t is None:
-        idx_t = None
+    if is_list(dim_out):
+        idx_out = dim_out
+        dim_out = None
+    elif is_mapping(dim_out):
+        idx_out = as_list(dim_out)
+    elif dim_out is None:
+        idx_out = None
     else:
         raise NotImplementedError()
 
     if isinstance(map, pd.Series):
-        idx_f = as_list(size_f) if size_f is not None else as_list(var)
-        map = create_map(map, idx_f, idx_t)
+        idx_f = as_list(dim_in) if dim_in is not None else var.index
+        map = create_map(map, idx_f, idx_out)
         res_series_names = map.index.names[1]
     else:
-        res_series_names = getattr(idx_t, "names", None)
+        res_series_names = getattr(idx_out, "names", None)
 
     result = apply_map(
         vtype=vtype,
         var=var,
         map=map,
-        size_t=size_t,
-        size_f=size_f,
+        size_t=dim_out,
+        size_f=dim_in,
         threshold=threshold,
         as_int=as_int,
     )

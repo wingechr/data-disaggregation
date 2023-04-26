@@ -312,8 +312,8 @@ class TestBaseExamples(TestCase):
                 (None, "11"): 0.99,  # cell will be dropped (size = 2)
                 (None, "10"): 1.1,  # (size = 2)
             },
-            size_f={None: 5},
-            size_t={"00": 1, "01": 1, "11": 2, "10": 2},
+            dim_in={None: 5},
+            dim_out={"00": 1, "01": 1, "11": 2, "10": 2},
             threshold=0.5,
         )
 
@@ -381,12 +381,12 @@ class TestBaseExamples(TestCase):
 
         # use size_t with a series (probably wrongly)
         res = VT_NumericExt.disagg(
-            s_region, s_month, size_t=pd.Series(1, index=idx_region_month)
+            s_region, s_month, dim_out=pd.Series(1, index=idx_region_month)
         )
         self.assertAlmostEqual(res[("a", "1")], 2)
 
         # use size_t with index only:
-        res = VT_NumericExt.disagg(s_region, s_month, size_t=idx_region_month)
+        res = VT_NumericExt.disagg(s_region, s_month, dim_out=idx_region_month)
         self.assertAlmostEqual(res[("a", "1")], 4)
 
         self.assertRaises(

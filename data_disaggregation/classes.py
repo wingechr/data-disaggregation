@@ -29,8 +29,8 @@ class VT(ABC):
         cls,
         var,
         map,
-        size_t=None,
-        size_f=None,
+        dim_out=None,
+        dim_in=None,
         threshold: float = 0.0,
         as_int: bool = False,
     ):
@@ -50,8 +50,8 @@ class VT(ABC):
             cls,
             var,
             map,
-            size_t=size_t,
-            size_f=size_f,
+            dim_out=dim_out,
+            dim_in=dim_in,
             threshold=threshold,
             as_int=as_int,
         )

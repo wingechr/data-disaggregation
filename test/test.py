@@ -3,6 +3,7 @@ from unittest import TestCase
 
 import numpy as np
 import pandas as pd
+from pandas import Index, MultiIndex, Series
 
 from data_disaggregation.classes import (
     SCALAR_DIM_NAME,
@@ -413,3 +414,89 @@ class TestBaseExamples(TestCase):
         self.assertRaises(
             Exception, VT_NumericExt.disagg, s_region, s_month, size_t=idx_hour
         )
+
+    def test_ex_2(self):
+        # although not required, we use pandas Series for data and weights
+        # using named Index/MultiIndex
+        # We start by setting up some dimensions (2 spatial, 1 temporal)
+        # using named Index
+
+        dim_region = Index(["r1", "r2"], name="region")
+        dim_subregion = Index(["r11", "r12", "r21", "r22"], name="subregion")
+        dim_time = Index(["t1", "t2", "t3"], name="time")
+
+        # We can use MultiIndex to create cross products:
+        dim_region_subregion = MultiIndex.from_product([dim_region, dim_subregion])
+        dim_region_time = MultiIndex.from_product([dim_region, dim_time])
+
+        # now we create Series for data and weights (which also includes
+        # relationships between dimensions)
+        # using a value of 1 here because all the subregions have
+        # the same weight relatively
+        w_region_subregion = Series(
+            {("r1", "r11"): 1, ("r1", "r12"): 1, ("r2", "r21"): 1, ("r2", "r22"): 1},
+            index=dim_region_subregion,
+        )
+
+        # define some data on the regional level
+        d_region = Series({"r1": 100, "r2": 200}, index=dim_region)
+
+        # use extensive disaggregation:
+        d_subregion = VT_NumericExt.disagg(d_region, w_region_subregion)
+        self.assertEqual(d_subregion.index.name, "subregion")
+        self.assertEqual(
+            set(d_subregion.items()),
+            set([("r11", 50), ("r12", 50), ("r21", 100), ("r22", 100)]),
+        )
+
+        # applying the same weight map aggregates it back.
+        d_region2 = VT_NumericExt.disagg(d_subregion, w_region_subregion)
+        self.assertEqual(d_region2.index.name, "region")
+        self.assertEqual(
+            set(d_region.items()),
+            set(d_region2.items()),
+        )
+
+        # using Intensive distribution, the values for the regions
+        # in the disaggregation are duplicated
+        d_region2 = VT_Numeric.disagg(d_subregion, w_region_subregion)
+        self.assertEqual(
+            set(d_region2.items()),
+            set([("r1", 50), ("r2", 100)]),
+        )
+
+        # distribute over a new dimension (time)
+        w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
+        s_region_time = VT_NumericExt.disagg(d_region, w_time, dim_region_time)
+        self.assertEqual(tuple(s_region_time.index.names), ("region", "time"))
+        self.assertEqual(
+            set(s_region_time.items()),
+            set(
+                [
+                    (("r1", "t1"), 20),
+                    (("r1", "t2"), 30),
+                    (("r1", "t3"), 50),
+                    (("r2", "t1"), 40),
+                    (("r2", "t2"), 60),
+                    (("r2", "t3"), 100),
+                ]
+            ),
+        )
+
+        # and what about scalar?
+        s_time = VT_NumericExt.disagg(100, w_time)
+        self.assertEqual(s_time.index.name, "time")
+        self.assertEqual(
+            set(s_time.items()),
+            set(
+                [
+                    ("t1", 20),
+                    ("t2", 30),
+                    ("t3", 50),
+                ]
+            ),
+        )
+
+        # ... and back
+        s = VT_NumericExt.disagg(s_time, w_time)
+        self.assertEqual(s, 100)

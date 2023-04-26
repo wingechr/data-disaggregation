@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 
 from data_disaggregation.classes import (
+    SCALAR_DIM_NAME,
+    SCALAR_INDEX_KEY,
     VT_Nominal,
     VT_Numeric,
     VT_NumericExt,
@@ -17,6 +19,7 @@ from data_disaggregation.ext import (
     is_multindex,
 )
 from data_disaggregation.utils import (
+    group_idx_first,
     group_sum,
     is_list,
     is_mapping,
@@ -75,7 +78,7 @@ class TestUtils(TestCase):
         s = 10  # scalar
         self.assertEqual(is_multindex(s), False)
         lvls = dict(get_dimension_levels(s))
-        self.assertEqual(lvls[None][0], None)
+        self.assertEqual(lvls[SCALAR_DIM_NAME][0], SCALAR_INDEX_KEY)
 
         d1 = pd.Index([10], name="d1")
         self.assertEqual(is_multindex(d1), False)
@@ -103,7 +106,7 @@ class TestUtils(TestCase):
         self.assertRaises(Exception, get_dimension_levels, xn)
 
     def test_align_map_todo(self):
-        d0 = pd.Index([None], name=None)
+        d0 = pd.Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
         d1 = pd.Index([1], name="d1")
         d1m = pd.MultiIndex.from_product([d1])
         d2 = pd.Index([2, 3], name="d2")
@@ -125,10 +128,10 @@ class TestUtils(TestCase):
         self.assertEqual(res[((1, 2), (2, 4))], 1)
 
         res = create_map(pd.Series(1, index=d1), 0, d1)
-        self.assertEqual(res[(None, 1)], 1)
+        self.assertEqual(res[(SCALAR_INDEX_KEY, 1)], 1)
 
         res = create_map(pd.Series(1, index=d1), d1, d0)
-        self.assertEqual(res[(1, None)], 1)
+        self.assertEqual(res[(1, SCALAR_INDEX_KEY)], 1)
 
     def test_is_scalar(self):
         for x in [1, None, "xyz", True]:
@@ -287,7 +290,11 @@ class TestBaseExamples(TestCase):
             vtype=VT_NumericExt,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
-            map={(1, None): 10, (2, None): 20, (3, None): 30},
+            map={
+                (1, SCALAR_INDEX_KEY): 10,
+                (2, SCALAR_INDEX_KEY): 20,
+                (3, SCALAR_INDEX_KEY): 30,
+            },
             threshold=0.5,
         )
         self.assertAlmostEqual(res, 1 + 1 + 10)
@@ -297,7 +304,11 @@ class TestBaseExamples(TestCase):
             vtype=VT_Numeric,
             var={1: 1, 2: 1, 3: 10},
             # size does not matter
-            map={(1, None): 10, (2, None): 20, (3, None): 30},
+            map={
+                (1, SCALAR_INDEX_KEY): 10,
+                (2, SCALAR_INDEX_KEY): 20,
+                (3, SCALAR_INDEX_KEY): 30,
+            },
         )
         self.assertAlmostEqual(res, 1 * 10 / 60 + 1 * 20 / 60 + 10 * 30 / 60)
 
@@ -305,14 +316,14 @@ class TestBaseExamples(TestCase):
         """case: rasterize a shape to partially overlapping cells"""
         res = disagg(
             vtype=VT_NumericExt,
-            var={None: 100},
+            var={SCALAR_INDEX_KEY: 100},
             map={
-                (None, "00"): 0.51,
-                (None, "01"): 0.49,  # cell will be dropped
-                (None, "11"): 0.99,  # cell will be dropped (size = 2)
-                (None, "10"): 1.1,  # (size = 2)
+                (SCALAR_INDEX_KEY, "00"): 0.51,
+                (SCALAR_INDEX_KEY, "01"): 0.49,  # cell will be dropped
+                (SCALAR_INDEX_KEY, "11"): 0.99,  # cell will be dropped (size = 2)
+                (SCALAR_INDEX_KEY, "10"): 1.1,  # (size = 2)
             },
-            dim_in={None: 5},
+            dim_in={SCALAR_INDEX_KEY: 5},
             dim_out={"00": 1, "01": 1, "11": 2, "10": 2},
             threshold=0.5,
         )
@@ -321,6 +332,16 @@ class TestBaseExamples(TestCase):
         self.assertAlmostEqual(res["10"], 100 / 5 * 2)
         self.assertAlmostEqual(res.get("11", 0), 0)
         self.assertAlmostEqual(res.get("01", 0), 0)
+
+    def test_scalar_key_none(self):
+        """when using None as ley for scalars,
+        pandas series index converts it no nan.
+        because nan != nan, group sum no longer works
+        """
+        d = {(SCALAR_INDEX_KEY, 1): 1, (SCALAR_INDEX_KEY, 2): 2}
+        s = pd.Series(d)
+        g = group_idx_first(s)
+        self.assertEqual(len(g), 1, "None should be grouped (but nan is not)")
 
     def test_todo(self):
         """case: split a variable differently in different years"""

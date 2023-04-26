@@ -10,6 +10,11 @@ F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
 
+SCALAR_DIM_NAME = "SCALAR_DIM_NAME"
+SCALAR_INDEX_KEY = (
+    "SCALAR_INDEX_KEY"  # using None causes problems with autoconvert to nan
+)
+
 
 class VT(ABC):
     @classmethod

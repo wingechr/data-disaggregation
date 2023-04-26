@@ -116,7 +116,10 @@ def apply_map(
         # validate var
         assert is_mapping(var)
         assert is_unique(var)
-        assert is_subset(var, size_f)
+
+        assert is_subset(
+            var, size_f
+        ), "Variable index is not a subset of input dimension subset"
 
         # validate map
         assert is_map(map)

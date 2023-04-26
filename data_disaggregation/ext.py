@@ -7,8 +7,8 @@ import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import apply_map
-from .classes import VT, F, T, V
-from .utils import as_list, as_mapping, is_list, is_mapping, is_na
+from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T, V
+from .utils import as_list, is_list, is_mapping, is_na, is_scalar
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -24,7 +24,7 @@ def get_dimension_levels(
 ) -> List[Tuple[str, List]]:
     if isinstance(x, (int, float)):
         # scalar: dummy dimension
-        x = Index([None], name=None)
+        x = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
     elif isinstance(x, (DataFrame, Series)):
         x = x.index
 
@@ -41,18 +41,18 @@ def get_idx_out(
     weights: Series, i_out: Union[DataFrame, Series, Index, MultiIndex, float]
 ):
     map_levels = get_dimension_levels(weights)
-
     from_levels = get_dimension_levels(i_out)
     from_level_names = [x[0] for x in from_levels]
 
     # determine out from difference (in - map)
     to_levels = [(k, v) for k, v in map_levels if k not in from_level_names]
-    to_levels_names = [x[0] for x in to_levels]
-    to_levels_values = [x[1] for x in to_levels]
 
     to_is_multindex = len(to_levels) > 1
     if not to_levels:  # aggregation to scalar
-        to_levels = [(None, [None])]
+        to_levels = [(SCALAR_DIM_NAME, [SCALAR_INDEX_KEY])]
+
+    to_levels_names = [x[0] for x in to_levels]
+    to_levels_values = [x[1] for x in to_levels]
 
     if to_is_multindex:
         return pd.MultiIndex.from_product(to_levels_values, names=to_levels_names)
@@ -109,6 +109,7 @@ def create_map(
         return key
 
     result = {}
+
     for row in product(*all_levels_values):
         key_map = get_key(row, map_level_idcs, map_is_multindex)
         val_map = weights.get(key_map)
@@ -121,14 +122,10 @@ def create_map(
         key = (key_from, key_to)
         result[key] = val_map
 
-        from_name = (
-            tuple(from_levels_names)
-            if len(from_levels_names) > 1
-            else from_levels_names[0]
-        )
-        to_name = (
-            tuple(to_levels_names) if len(to_levels_names) > 1 else to_levels_names[0]
-        )
+    from_name = (
+        tuple(from_levels_names) if len(from_levels_names) > 1 else from_levels_names[0]
+    )
+    to_name = tuple(to_levels_names) if len(to_levels_names) > 1 else to_levels_names[0]
 
     result = pd.Series(result).rename_axis([from_name, to_name])
 
@@ -155,7 +152,11 @@ def disagg(
         as_int (optional):
 
     """
-    var = as_mapping(var)
+    if is_scalar(var):
+        var = Series({SCALAR_INDEX_KEY: var}).rename_axis([SCALAR_DIM_NAME])
+
+    if not isinstance(var, Series):
+        var = Series(var)
 
     if is_list(dim_out):
         idx_out = dim_out
@@ -168,8 +169,9 @@ def disagg(
         raise NotImplementedError()
 
     if isinstance(map, pd.Series):
-        idx_f = as_list(dim_in) if dim_in is not None else var.index
-        map = create_map(map, idx_f, idx_out)
+        idx_in = as_list(dim_in) if dim_in is not None else var.index
+
+        map = create_map(map, idx_in, idx_out)
         res_series_names = map.index.names[1]
     else:
         res_series_names = getattr(idx_out, "names", None)
@@ -191,7 +193,7 @@ def disagg(
         result = pd.Series(result, dtype=res_series_dtype).rename_axis(res_series_names)
 
     # result as scalar
-    if set(result.keys()) == set([None]):
-        result = result[None]
+    if set(result.keys()) == set([SCALAR_INDEX_KEY]):
+        result = result[SCALAR_INDEX_KEY]
 
     return result

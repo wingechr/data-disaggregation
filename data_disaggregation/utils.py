@@ -3,6 +3,8 @@
 import math
 from typing import Callable, List, Mapping, Tuple
 
+from . import classes
+
 
 def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     """simple group sum
@@ -152,7 +154,7 @@ def as_mapping(x, default_val=1) -> Mapping:
     elif is_list(x):
         return dict((x, 1) for k in x)
     elif is_scalar(x):
-        return {None: x}
+        return {classes.SCALAR_INDEX_KEY: x}
     raise TypeError(x)
 
 
@@ -160,8 +162,8 @@ def as_scalar(x):
     if as_scalar(x):
         return x
     elif is_mapping(x):
-        assert set(x.keys()) == set([None])
-        return x[None]
+        assert set(x.keys()) == set([classes.SCALAR_INDEX_KEY])
+        return x[classes.SCALAR_INDEX_KEY]
     raise TypeError(x)
 
 

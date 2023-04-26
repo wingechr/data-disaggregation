@@ -140,11 +140,22 @@ def disagg(
     vtype: VT,
     var: Mapping[F, V],
     map: Union[Mapping[Tuple[F, T], float], Series],
-    size_f: Mapping[F, float] = None,
     size_t: Mapping[T, float] = None,
+    size_f: Mapping[F, float] = None,
     threshold: float = 0.0,
     as_int: bool = False,
 ) -> Mapping[T, V]:
+    """
+    Args:
+        vtype: data type (impacts aggregation function)
+        var: indexed data
+        map: weight data
+        size_f (optional):
+        size_t (optional):
+        threshold (optional):
+        as_int (optional):
+
+    """
     var = as_mapping(var)
 
     if is_list(size_t):
@@ -168,8 +179,8 @@ def disagg(
         vtype=vtype,
         var=var,
         map=map,
-        size_f=size_f,
         size_t=size_t,
+        size_f=size_f,
         threshold=threshold,
         as_int=as_int,
     )

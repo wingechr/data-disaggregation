@@ -106,7 +106,7 @@ def apply_map(
         # validate size_f
         assert is_mapping(size_f)
         assert is_unique(size_f)
-        assert all(v > 0 for v in iter_values(size_f)), map
+        assert all(v > 0 for v in iter_values(size_f))
 
         # validate size_t
         assert is_mapping(size_t)

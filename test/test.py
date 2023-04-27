@@ -467,7 +467,7 @@ class TestBaseExamples(TestCase):
 
         # distribute over a new dimension (time)
         w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
-        s_region_time = VT_NumericExt.disagg(d_region, w_time, dim_region_time)
+        s_region_time = VT_NumericExt.disagg(d_region, w_time, dim_out=dim_region_time)
         self.assertEqual(tuple(s_region_time.index.names), ("region", "time"))
         self.assertEqual(
             set(s_region_time.items()),

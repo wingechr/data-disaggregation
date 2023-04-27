@@ -29,36 +29,8 @@ class VT(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def disagg(
-        cls,
-        var,
-        map,
-        dim_out=None,
-        dim_in=None,
-        threshold: float = 0.0,
-        as_int: bool = False,
-    ):
-        """
-        Args:
-            vtype: data type (impacts aggregation function)
-            var: indexed data
-            map: weight data
-            size_t (optional):
-            size_f (optional):
-            threshold (optional):
-            as_int (optional):
-
-        """
-
-        return ext.disagg(
-            cls,
-            var,
-            map,
-            dim_out=dim_out,
-            dim_in=dim_in,
-            threshold=threshold,
-            as_int=as_int,
-        )
+    def disagg(cls, *args, **kwargs):
+        return ext.disagg(cls, *args, **kwargs)
 
 
 class VT_Nominal(VT):

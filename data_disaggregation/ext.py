@@ -166,7 +166,7 @@ def disagg(
         else:
             raise NotImplementedError()
 
-        idx_in = as_list(dim_in) if dim_in is not None else data.index
+        idx_in = data.index
 
         weights = create_map(weights, idx_in, idx_out)
         res_series_names = weights.index.names[1]

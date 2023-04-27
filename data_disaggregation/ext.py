@@ -136,7 +136,7 @@ def create_weightmap(
 
 
 def create_result_wrapper(weight_map: Series):
-    index_names = weight_map.index.names
+    index_names = weight_map.index.names[1]
 
     def result_wrapper(result):
         return Series(result).rename_axis(index_names)

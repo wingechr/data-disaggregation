@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from pandas import Index, MultiIndex, Series
 
+from data_disaggregation.base import transform
 from data_disaggregation.classes import (
     SCALAR_DIM_NAME,
     SCALAR_INDEX_KEY,
@@ -14,10 +15,10 @@ from data_disaggregation.classes import (
     VT_Ordinal,
 )
 from data_disaggregation.ext import (
+    create_result_wrapper,
     create_weightmap,
     get_dimension_levels,
     is_multindex,
-    transform,
 )
 from data_disaggregation.utils import (
     group_idx_first,
@@ -442,7 +443,7 @@ class TestBaseExamples(TestCase):
         # use extensive disaggregation:
         map = create_weightmap(w_region_subregion, d_region.index)
         d_subregion = transform(VT_NumericExt, d_region, weight_map=map)
-        d_subregion = Series(d_subregion).rename_axis(map.index.names[1])
+        d_subregion = create_result_wrapper(map)(d_subregion)
 
         self.assertEqual(d_subregion.index.name, "subregion")
         self.assertEqual(
@@ -453,7 +454,7 @@ class TestBaseExamples(TestCase):
         # applying the same weight map aggregates it back.
         map = create_weightmap(w_region_subregion, d_subregion.index)
         d_region2 = transform(VT_NumericExt, d_subregion, weight_map=map)
-        d_region2 = Series(d_region2).rename_axis(map.index.names[1])
+        d_region2 = create_result_wrapper(map)(d_region2)
 
         self.assertEqual(d_region2.index.name, "region")
         self.assertEqual(
@@ -474,7 +475,7 @@ class TestBaseExamples(TestCase):
         w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
         map = create_weightmap(w_time, d_region.index, dim_region_time)
         s_region_time = transform(VT_NumericExt, d_region, weight_map=map)
-        s_region_time = Series(s_region_time).rename_axis(map.index.names[1])
+        s_region_time = create_result_wrapper(map)(s_region_time)
 
         self.assertEqual(tuple(s_region_time.index.names), ("region", "time"))
         self.assertEqual(
@@ -495,7 +496,7 @@ class TestBaseExamples(TestCase):
         map = create_weightmap(w_time)
         scal = Series({SCALAR_INDEX_KEY: 100}, name=SCALAR_DIM_NAME)
         s_time = transform(VT_NumericExt, scal, weight_map=map)
-        s_time = Series(s_time).rename_axis(map.index.names[1])
+        s_time = create_result_wrapper(map)(s_time)
         self.assertEqual(s_time.index.name, "time")
         self.assertEqual(
             set(s_time.items()),

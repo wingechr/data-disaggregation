@@ -1,4 +1,4 @@
-__version__ = "0.8.2"
+__version__ = "0.9.0"
 
 # isort: skip_file -> keep order to prevent circular import
 from .ext import disagg

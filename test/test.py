@@ -196,7 +196,7 @@ class TestBase(TestCase):
         var = {"a": 5, "b": 10, "c": 30}
 
         return disagg(
-            vtype=vtype, var=var, map=map, as_int=issubclass(vtype, VT_Numeric)
+            vtype=vtype, data=var, weights=map, as_int=issubclass(vtype, VT_Numeric)
         )
 
     def test_example_type_categorical(self):
@@ -258,8 +258,8 @@ class TestDataframe(TestCase):
         s_var.index.names = ["d1"]
 
         return disagg(
-            map=s_map,
-            var=s_var,
+            weights=s_map,
+            data=s_var,
             vtype=vtype,
             as_int=issubclass(vtype, VT_Numeric),
         )
@@ -289,9 +289,9 @@ class TestBaseExamples(TestCase):
     def test_aggregate_ext(self):
         res = disagg(
             vtype=VT_NumericExt,
-            var={1: 1, 2: 1, 3: 10},
+            data={1: 1, 2: 1, 3: 10},
             # size does not matter
-            map={
+            weights={
                 (1, SCALAR_INDEX_KEY): 10,
                 (2, SCALAR_INDEX_KEY): 20,
                 (3, SCALAR_INDEX_KEY): 30,
@@ -303,9 +303,9 @@ class TestBaseExamples(TestCase):
     def test_aggregate_int(self):
         res = disagg(
             vtype=VT_Numeric,
-            var={1: 1, 2: 1, 3: 10},
+            data={1: 1, 2: 1, 3: 10},
             # size does not matter
-            map={
+            weights={
                 (1, SCALAR_INDEX_KEY): 10,
                 (2, SCALAR_INDEX_KEY): 20,
                 (3, SCALAR_INDEX_KEY): 30,
@@ -317,8 +317,8 @@ class TestBaseExamples(TestCase):
         """case: rasterize a shape to partially overlapping cells"""
         res = disagg(
             vtype=VT_NumericExt,
-            var={SCALAR_INDEX_KEY: 100},
-            map={
+            data={SCALAR_INDEX_KEY: 100},
+            weights={
                 (SCALAR_INDEX_KEY, "00"): 0.51,
                 (SCALAR_INDEX_KEY, "01"): 0.49,  # cell will be dropped
                 (SCALAR_INDEX_KEY, "11"): 0.99,  # cell will be dropped (size = 2)
@@ -348,13 +348,13 @@ class TestBaseExamples(TestCase):
         """case: split a variable differently in different years"""
         res = disagg(
             vtype=VT_NumericExt,
-            var={
+            data={
                 ("v1", "t1"): 10,
                 ("v2", "t1"): 11,
                 ("v1", "t2"): 12,
                 ("v2", "t2"): 13,
             },
-            map={
+            weights={
                 # normalized in t1
                 (("v1", "t1"), ("u1", "t1")): 0.7,
                 (("v1", "t1"), ("u2", "t1")): 0.3,

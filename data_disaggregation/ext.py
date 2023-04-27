@@ -8,7 +8,7 @@ from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import apply_map
 from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T, V
-from .utils import as_list, is_list, is_mapping, is_na, is_scalar
+from .utils import as_list, is_list, is_map, is_mapping, is_na, is_scalar
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -134,8 +134,8 @@ def create_map(
 
 def disagg(
     vtype: VT,
-    var: Mapping[F, V],
-    map: Union[Mapping[Tuple[F, T], float], Series],
+    data: Mapping[F, V],
+    weights: Union[Mapping[Tuple[F, T], float], Series],
     dim_out: Mapping[T, float] = None,
     dim_in: Mapping[F, float] = None,
     threshold: float = 0.0,
@@ -144,42 +144,39 @@ def disagg(
     """
     Args:
         vtype: data type (impacts aggregation function)
-        var: indexed data
-        map: weight data
+        data: indexed data
+        weights: weight data
         size_f (optional):
         size_t (optional):
         threshold (optional):
         as_int (optional):
 
     """
-    if is_scalar(var):
-        var = Series({SCALAR_INDEX_KEY: var}).rename_axis([SCALAR_DIM_NAME])
+    if is_scalar(data):
+        data = Series({SCALAR_INDEX_KEY: data}).rename_axis([SCALAR_DIM_NAME])
 
-    if not isinstance(var, Series):
-        var = Series(var)
+    if not is_map(weights) or isinstance(weights, Series):
+        if is_list(dim_out):
+            idx_out = dim_out
+            dim_out = None
+        elif is_mapping(dim_out):
+            idx_out = as_list(dim_out)
+        elif dim_out is None:
+            idx_out = None
+        else:
+            raise NotImplementedError()
 
-    if is_list(dim_out):
-        idx_out = dim_out
-        dim_out = None
-    elif is_mapping(dim_out):
-        idx_out = as_list(dim_out)
-    elif dim_out is None:
-        idx_out = None
+        idx_in = as_list(dim_in) if dim_in is not None else data.index
+
+        weights = create_map(weights, idx_in, idx_out)
+        res_series_names = weights.index.names[1]
     else:
-        raise NotImplementedError()
-
-    if isinstance(map, pd.Series):
-        idx_in = as_list(dim_in) if dim_in is not None else var.index
-
-        map = create_map(map, idx_in, idx_out)
-        res_series_names = map.index.names[1]
-    else:
-        res_series_names = getattr(idx_out, "names", None)
+        res_series_names = None
 
     result = apply_map(
         vtype=vtype,
-        var=var,
-        map=map,
+        var=data,
+        map=weights,
         size_t=dim_out,
         size_f=dim_in,
         threshold=threshold,
@@ -187,9 +184,8 @@ def disagg(
     )
 
     # result as series
-    res_series_dtype = getattr(var, "dtype", None)
-
-    if res_series_names:
+    if isinstance(data, pd.Series):
+        res_series_dtype = getattr(data, "dtype", None)
         result = pd.Series(result, dtype=res_series_dtype).rename_axis(res_series_names)
 
     # result as scalar

@@ -168,4 +168,5 @@ def as_scalar(x):
 
 
 def is_map(map) -> bool:
+    """TODO: this is slow"""
     return is_mapping(map) and all(len(k) == 2 for k in map.keys())

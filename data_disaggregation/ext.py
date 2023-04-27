@@ -3,7 +3,6 @@
 from itertools import product
 from typing import List, Mapping, Tuple, Union
 
-import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
@@ -55,9 +54,9 @@ def get_idx_out(
     to_levels_values = [x[1] for x in to_levels]
 
     if to_is_multindex:
-        return pd.MultiIndex.from_product(to_levels_values, names=to_levels_names)
+        return MultiIndex.from_product(to_levels_values, names=to_levels_names)
     else:
-        return pd.Index(to_levels_values[0], name=to_levels_names[0])
+        return Index(to_levels_values[0], name=to_levels_names[0])
 
 
 def create_weight_map(
@@ -124,7 +123,7 @@ def create_weight_map(
     )
     to_name = tuple(to_levels_names) if len(to_levels_names) > 1 else to_levels_names[0]
 
-    result = pd.Series(result).rename_axis([from_name, to_name])
+    result = Series(result).rename_axis([from_name, to_name])
 
     return result
 

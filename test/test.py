@@ -2,8 +2,7 @@ import logging
 from unittest import TestCase
 
 import numpy as np
-import pandas as pd
-from pandas import Index, MultiIndex, Series
+from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation.base import transform
 from data_disaggregation.classes import (
@@ -82,57 +81,57 @@ class TestUtils(TestCase):
         lvls = dict(get_dimension_levels(s))
         self.assertEqual(lvls[SCALAR_DIM_NAME][0], SCALAR_INDEX_KEY)
 
-        d1 = pd.Index([10], name="d1")
+        d1 = Index([10], name="d1")
         self.assertEqual(is_multindex(d1), False)
         lvls = dict(get_dimension_levels(d1))
         self.assertEqual(lvls["d1"][0], 10)
 
-        s1 = pd.Series(index=d1, dtype="float")
+        s1 = Series(index=d1, dtype="float")
         self.assertEqual(is_multindex(s1), False)
         lvls = dict(get_dimension_levels(s1))
         self.assertEqual(lvls["d1"][0], 10)
 
-        dm = pd.MultiIndex.from_product([d1])
+        dm = MultiIndex.from_product([d1])
         self.assertEqual(is_multindex(dm), True)
         lvls = dict(get_dimension_levels(dm))
         self.assertEqual(lvls["d1"][0], (10,))
 
-        sm = pd.Series(index=dm, dtype="float")
+        sm = Series(index=dm, dtype="float")
         self.assertEqual(is_multindex(sm), True)
         lvls = dict(get_dimension_levels(sm))
         self.assertEqual(lvls["d1"][0], (10,))
 
         # names must be unique
 
-        xn = pd.MultiIndex.from_product([[1], [2]], names=["d", "d"])
+        xn = MultiIndex.from_product([[1], [2]], names=["d", "d"])
         self.assertRaises(Exception, get_dimension_levels, xn)
 
     def test_align_map_todo(self):
-        d0 = pd.Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
-        d1 = pd.Index([1], name="d1")
-        d1m = pd.MultiIndex.from_product([d1])
-        d2 = pd.Index([2, 3], name="d2")
-        d2m = pd.MultiIndex.from_product([d2])
-        d12 = pd.MultiIndex.from_product([d1, d2])
-        d3 = pd.Index([4], name="d3")
-        d23 = pd.MultiIndex.from_product([d2, d3])
+        d0 = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
+        d1 = Index([1], name="d1")
+        d1m = MultiIndex.from_product([d1])
+        d2 = Index([2, 3], name="d2")
+        d2m = MultiIndex.from_product([d2])
+        d12 = MultiIndex.from_product([d1, d2])
+        d3 = Index([4], name="d3")
+        d23 = MultiIndex.from_product([d2, d3])
 
-        res = create_weight_map(pd.Series(1, index=d12), d1, d2)
+        res = create_weight_map(Series(1, index=d12), d1, d2)
         self.assertEqual(res[(1, 2)], 1)
 
-        res = create_weight_map(pd.Series(1, index=d12), d1m, d2)
+        res = create_weight_map(Series(1, index=d12), d1m, d2)
         self.assertEqual(res[((1,), 2)], 1)
 
-        res = create_weight_map(pd.Series(1, index=d12), d1m, d2m)
+        res = create_weight_map(Series(1, index=d12), d1m, d2m)
         self.assertEqual(res[((1,), (2,))], 1)
 
-        res = create_weight_map(pd.Series(1, index=d23), d12, d23)
+        res = create_weight_map(Series(1, index=d23), d12, d23)
         self.assertEqual(res[((1, 2), (2, 4))], 1)
 
-        res = create_weight_map(pd.Series(1, index=d1), 0, d1)
+        res = create_weight_map(Series(1, index=d1), 0, d1)
         self.assertEqual(res[(SCALAR_INDEX_KEY, 1)], 1)
 
-        res = create_weight_map(pd.Series(1, index=d1), d1, d0)
+        res = create_weight_map(Series(1, index=d1), d1, d0)
         self.assertEqual(res[(1, SCALAR_INDEX_KEY)], 1)
 
     def test_is_scalar(self):
@@ -144,8 +143,8 @@ class TestUtils(TestCase):
         for x in [
             [],
             (1, 2, 3),
-            pd.MultiIndex.from_product([[1, 2]]),
-            pd.Index(["a", "b"]),
+            MultiIndex.from_product([[1, 2]]),
+            Index(["a", "b"]),
             set([1, 2]),
         ]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
@@ -154,10 +153,10 @@ class TestUtils(TestCase):
     def test_is_mapping(self):
         for x in [
             {},
-            pd.Series(dtype=float),
-            pd.Series({1: 1}),
-            pd.DataFrame(dtype=float),
-            pd.DataFrame({"a": [1, 2, 3]}),
+            Series(dtype=float),
+            Series({1: 1}),
+            DataFrame(dtype=float),
+            DataFrame({"a": [1, 2, 3]}),
         ]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
             self.assertEqual(res, (False, False, True), x)
@@ -244,7 +243,7 @@ class TestDataframe(TestCase):
         ]
 
         """
-        s_map = pd.Series(
+        s_map = Series(
             {
                 ("a", "F"): 2,
                 ("b", "D"): 1,
@@ -255,7 +254,7 @@ class TestDataframe(TestCase):
         )
         s_map.index.names = ["d1", "d2"]
 
-        s_var = pd.Series({"a": 5, "b": 10, "c": 30})
+        s_var = Series({"a": 5, "b": 10, "c": 30})
         s_var.index.names = ["d1"]
 
         return transform(
@@ -343,7 +342,7 @@ class TestBaseExamples(TestCase):
         because nan != nan, group sum no longer works
         """
         d = {(SCALAR_INDEX_KEY, 1): 1, (SCALAR_INDEX_KEY, 2): 2}
-        s = pd.Series(d)
+        s = Series(d)
         g = group_idx_first(s)
         self.assertEqual(len(g), 1, "None should be grouped (but nan is not)")
 
@@ -378,27 +377,27 @@ class TestBaseExamples(TestCase):
 
     def test_ex_1(self):
         # create dimensions as pandas Index
-        idx_month = pd.Index(["1", "2"], name="month")
-        idx_hour = pd.Index(["11", "21", "22"], name="hour")
-        idx_region = pd.Index(["a", "b"], name="region")
+        idx_month = Index(["1", "2"], name="month")
+        idx_hour = Index(["11", "21", "22"], name="hour")
+        idx_region = Index(["a", "b"], name="region")
 
         # create multi dimensions as pandas MultiIndex
-        idx_region_month = pd.MultiIndex.from_product([idx_region, idx_month])
-        # idx_region_hour = pd.MultiIndex.from_product([idx_region, idx_hour])
+        idx_region_month = MultiIndex.from_product([idx_region, idx_month])
+        # idx_region_hour = MultiIndex.from_product([idx_region, idx_hour])
 
         # create data as pandas series over dimensions
         # example: series over region
-        s_region = pd.Series({"a": 10, "b": 30}, index=idx_region)
+        s_region = Series({"a": 10, "b": 30}, index=idx_region)
         # or just rename the index
-        # s_region = pd.Series({"a": 10, "b": 30}, dtype="pint[meter]").rename_axis(["region"])  # noqa
-        s_region = pd.Series({"a": 10, "b": 30}).rename_axis(["region"])
+        # s_region = Series({"a": 10, "b": 30}, dtype="pint[meter]").rename_axis(["region"])  # noqa
+        s_region = Series({"a": 10, "b": 30}).rename_axis(["region"])
 
         # create (weighted) map between dimensions (in the simple case, all weights = 1)
         # as a series, with all dimensions in the index
-        s_month = pd.Series({"1": 2, "2": 3}, index=idx_month)
+        s_month = Series({"1": 2, "2": 3}, index=idx_month)
 
         # replicate weight map to a second dimension
-        s_month = s_month * pd.Series(1, index=idx_region_month)
+        s_month = s_month * Series(1, index=idx_region_month)
 
         # auto aggregation => output dimension is only month
         res = transform_ds(VT_NumericExt, s_region, weights=s_month)

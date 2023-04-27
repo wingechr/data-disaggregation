@@ -4,7 +4,7 @@
 from abc import ABC
 from typing import TypeVar
 
-from . import ext, utils
+from . import utils
 
 F = TypeVar("F")
 T = TypeVar("T")
@@ -27,10 +27,6 @@ class VT(ABC):
             aggregated value
         """
         raise NotImplementedError()
-
-    @classmethod
-    def disagg(cls, *args, **kwargs):
-        return ext.disagg(cls, *args, **kwargs)
 
 
 class VT_Nominal(VT):

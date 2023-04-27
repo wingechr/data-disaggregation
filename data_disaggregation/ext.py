@@ -6,7 +6,7 @@ from typing import List, Mapping, Optional, Tuple, Union
 import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
-from .base import apply_map
+from .base import transform
 from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T, V
 from .utils import as_list, is_list, is_map, is_mapping, is_na, is_scalar
 
@@ -60,13 +60,17 @@ def get_idx_out(
         return pd.Index(to_levels_values[0], name=to_levels_names[0])
 
 
-def create_map(
+def create_weightmap(
     weights: Series,
-    i_in: Union[DataFrame, Series, Index, MultiIndex, float],
+    i_in: Union[DataFrame, Series, Index, MultiIndex, float] = None,
     i_out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]] = None,
 ) -> Mapping[Tuple[F, T], float]:
     if is_list(weights):
         weights = pd.Series(1, index=weights)
+
+    # TODO??
+    if i_in is None:
+        i_in = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
 
     if i_out is None:
         i_out = get_idx_out(weights, i_in)
@@ -132,7 +136,7 @@ def create_map(
     return result
 
 
-def disagg(
+def _disagg(
     vtype: VT,
     data: Mapping[F, V],
     weights: Union[Mapping[Tuple[F, T], float], Series],
@@ -168,17 +172,17 @@ def disagg(
 
         idx_in = data.index
 
-        weights = create_map(weights, idx_in, idx_out)
+        weights = create_weightmap(weights, idx_in, idx_out)
         res_series_names = weights.index.names[1]
     else:
         res_series_names = None
 
-    result = apply_map(
+    result = transform(
         vtype=vtype,
-        var=data,
-        map=weights,
-        size_t=dim_out,
-        size_f=dim_in,
+        data=data,
+        weight_map=weights,
+        size_out=dim_out,
+        size_in=dim_in,
         threshold=threshold,
         as_int=as_int,
     )

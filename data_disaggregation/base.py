@@ -63,21 +63,21 @@ from .utils import (
 
 def get_groups(
     vtype: VT,
-    var: Mapping[F, V],
-    map: Mapping[Tuple[F, T], float],
-    size_f: Mapping[F, float],
+    data: Mapping[F, V],
+    weight_map: Mapping[Tuple[F, T], float],
+    size_in: Mapping[F, float],
 ) -> Mapping[T, Tuple[V, float]]:
     result = {}
 
-    for (f, t), w in map.items():
+    for (f, t), w in weight_map.items():
         # get not na value
-        v = var.get(f)
+        v = data.get(f)
         if is_na(v):
             continue
 
         #  scale extensive => intensive
         if vtype == VT_NumericExt:
-            v /= size_f[f]
+            v /= size_in[f]
 
         if t not in result:
             result[t] = []
@@ -86,61 +86,62 @@ def get_groups(
     return result
 
 
-def apply_map(
+def transform(
     vtype: VT,
-    var: Mapping[F, V],
-    map: Mapping[Tuple[F, T], float],
-    size_t: Mapping[T, float] = None,
-    size_f: Mapping[F, float] = None,
+    data: Mapping[F, V],
+    weight_map: Mapping[Tuple[F, T], float],
+    size_in: Mapping[F, float] = None,
+    size_out: Mapping[T, float] = None,
     threshold: float = 0.0,
     as_int: bool = False,
     validate=True,
+    wrap_result=None,
 ) -> Mapping[T, V]:
-    if size_f is None:
-        size_f = group_idx_first(map)
+    if size_in is None:
+        size_in = group_idx_first(weight_map)
 
-    if size_t is None:
-        size_t = group_idx_second(map)
+    if size_out is None:
+        size_out = group_idx_second(weight_map)
 
     if validate:
         # validate size_f
-        assert is_mapping(size_f)
-        assert is_unique(size_f)
-        assert all(v > 0 for v in iter_values(size_f))
+        assert is_mapping(size_in)
+        assert is_unique(size_in)
+        assert all(v > 0 for v in iter_values(size_in))
 
         # validate size_t
-        assert is_mapping(size_t)
-        assert is_unique(size_t)
-        assert all(v > 0 for v in iter_values(size_t))
+        assert is_mapping(size_out)
+        assert is_unique(size_out)
+        assert all(v > 0 for v in iter_values(size_out))
 
         # validate var
-        assert is_mapping(var)
-        assert is_unique(var)
+        assert is_mapping(data)
+        assert is_unique(data)
 
         assert is_subset(
-            var, size_f
+            data, size_in
         ), "Variable index is not a subset of input dimension subset"
 
         # validate map
-        assert is_map(map)
-        assert is_unique(map)
-        assert all(v >= 0 for v in iter_values(map))
-        assert is_subset([x[0] for x in map.keys()], size_f)
-        assert is_subset([x[1] for x in map.keys()], size_t)
+        assert is_map(weight_map)
+        assert is_unique(weight_map)
+        assert all(v >= 0 for v in iter_values(weight_map))
+        assert is_subset([x[0] for x in weight_map.keys()], size_in)
+        assert is_subset([x[1] for x in weight_map.keys()], size_out)
 
     result = {}
 
-    groups = get_groups(vtype, var, map, size_f)
+    groups = get_groups(vtype=vtype, data=data, weight_map=weight_map, size_in=size_in)
 
     for t, vws in groups.items():
         # weights sum
         sumw = sum(w for _, w in vws)
         # TODO drop test
-        sumw <= size_t[t]
+        sumw <= size_out[t]
 
         # drop result?
         if threshold:
-            if (sumw / size_t[t]) < threshold:
+            if (sumw / size_out[t]) < threshold:
                 continue
 
         # normalize weights
@@ -151,7 +152,7 @@ def apply_map(
 
         #  re-scale intensive => extensive
         if vtype == VT_NumericExt:
-            v *= size_t[t]
+            v *= size_out[t]
 
         result[t] = v
 
@@ -162,7 +163,11 @@ def apply_map(
 
     if validate:
         # todo remove checks at the end
-        assert is_subset(result, size_t)
+        assert is_subset(result, size_out)
         assert is_unique(result)
+
+    # result same type as data:
+    if wrap_result:
+        result = wrap_result(result)
 
     return result

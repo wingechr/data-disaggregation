@@ -1,14 +1,14 @@
 """extended functions, especially for pandas Series
 """
 from itertools import product
-from typing import List, Mapping, Optional, Tuple, Union
+from typing import List, Mapping, Tuple, Union
 
 import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
 from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T
-from .utils import is_list, is_na, is_scalar
+from .utils import is_na, is_scalar
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -62,16 +62,9 @@ def get_idx_out(
 
 def create_weight_map(
     weights: Series,
-    idx_in: Union[DataFrame, Series, Index, MultiIndex, float] = None,
-    idx_out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]] = None,
+    idx_in: Index,
+    idx_out: Index = None,
 ) -> Mapping[Tuple[F, T], float]:
-    if is_list(weights):
-        weights = pd.Series(1, index=weights)
-
-    # TODO??
-    if idx_in is None:
-        idx_in = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
-
     if idx_out is None:
         idx_out = get_idx_out(weights, idx_in)
 
@@ -134,15 +127,6 @@ def create_weight_map(
     result = pd.Series(result).rename_axis([from_name, to_name])
 
     return result
-
-
-def create_result_wrapper(weight_map: Series):
-    index_names = weight_map.index.names[1]
-
-    def result_wrapper(result):
-        return Series(result).rename_axis(index_names)
-
-    return result_wrapper
 
 
 def transform_ds(

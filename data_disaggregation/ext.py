@@ -6,8 +6,9 @@ from typing import List, Mapping, Optional, Tuple, Union
 import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
-from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, F, T
-from .utils import is_list, is_na
+from .base import transform
+from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T
+from .utils import is_list, is_na, is_scalar
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -59,31 +60,31 @@ def get_idx_out(
         return pd.Index(to_levels_values[0], name=to_levels_names[0])
 
 
-def create_weightmap(
+def create_weight_map(
     weights: Series,
-    i_in: Union[DataFrame, Series, Index, MultiIndex, float] = None,
-    i_out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]] = None,
+    idx_in: Union[DataFrame, Series, Index, MultiIndex, float] = None,
+    idx_out: Optional[Union[DataFrame, Series, Index, MultiIndex, float]] = None,
 ) -> Mapping[Tuple[F, T], float]:
     if is_list(weights):
         weights = pd.Series(1, index=weights)
 
     # TODO??
-    if i_in is None:
-        i_in = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
+    if idx_in is None:
+        idx_in = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
 
-    if i_out is None:
-        i_out = get_idx_out(weights, i_in)
+    if idx_out is None:
+        idx_out = get_idx_out(weights, idx_in)
 
     map_levels = get_dimension_levels(weights)
     map_is_multindex = is_multindex(weights)
 
-    from_levels = get_dimension_levels(i_in)
+    from_levels = get_dimension_levels(idx_in)
     from_levels_names = [x[0] for x in from_levels]
-    from_is_multindex = is_multindex(i_in)
+    from_is_multindex = is_multindex(idx_in)
 
-    to_levels = get_dimension_levels(i_out)
+    to_levels = get_dimension_levels(idx_out)
     to_levels_names = [x[0] for x in to_levels]
-    to_is_multindex = is_multindex(i_out)
+    to_is_multindex = is_multindex(idx_out)
 
     all_levels = []
     for name, items in from_levels:
@@ -142,3 +143,65 @@ def create_result_wrapper(weight_map: Series):
         return Series(result).rename_axis(index_names)
 
     return result_wrapper
+
+
+def transform_ds(
+    vtype: VT,
+    data: Series,
+    weights: Series,
+    dim_in: Series = None,
+    dim_out: Series = None,
+    threshold: float = 0.0,
+    as_int: bool = False,
+    validate=True,
+) -> Series:
+    if is_scalar(data):
+        data = Series({SCALAR_INDEX_KEY: data}).rename_axis([SCALAR_DIM_NAME])
+
+    if isinstance(dim_in, Index):
+        idx_in = dim_in
+        size_in = None
+    elif isinstance(dim_in, Series):
+        idx_in = dim_in
+        size_in = dim_in
+    elif dim_in is None:
+        idx_in = data.index
+        size_in = None
+    else:
+        raise NotImplementedError()
+
+    if isinstance(dim_out, Index):
+        idx_out = dim_out
+        size_out = None
+    elif isinstance(dim_out, Series):
+        idx_out = dim_out
+        size_out = dim_out
+    elif dim_out is None:
+        idx_out = None
+        size_out = None
+    else:
+        raise NotImplementedError()
+
+    weight_map = create_weight_map(weights=weights, idx_in=idx_in, idx_out=idx_out)
+
+    result = transform(
+        vtype=vtype,
+        data=data,
+        weight_map=weight_map,
+        size_in=size_in,
+        size_out=size_out,
+        threshold=threshold,
+        as_int=as_int,
+        validate=validate,
+    )
+
+    index_names = weight_map.index.names[1]
+    dtype = data.dtype
+
+    # scalar
+    if set(result.keys()) == set([SCALAR_INDEX_KEY]):
+        result = result[SCALAR_INDEX_KEY]
+    else:
+        result = Series(result).rename_axis(index_names).astype(dtype)
+
+    return result

@@ -15,10 +15,10 @@ from data_disaggregation.classes import (
     VT_Ordinal,
 )
 from data_disaggregation.ext import (
-    create_result_wrapper,
-    create_weightmap,
+    create_weight_map,
     get_dimension_levels,
     is_multindex,
+    transform_ds,
 )
 from data_disaggregation.utils import (
     group_idx_first,
@@ -117,22 +117,22 @@ class TestUtils(TestCase):
         d3 = pd.Index([4], name="d3")
         d23 = pd.MultiIndex.from_product([d2, d3])
 
-        res = create_weightmap(pd.Series(1, index=d12), d1, d2)
+        res = create_weight_map(pd.Series(1, index=d12), d1, d2)
         self.assertEqual(res[(1, 2)], 1)
 
-        res = create_weightmap(pd.Series(1, index=d12), d1m, d2)
+        res = create_weight_map(pd.Series(1, index=d12), d1m, d2)
         self.assertEqual(res[((1,), 2)], 1)
 
-        res = create_weightmap(pd.Series(1, index=d12), d1m, d2m)
+        res = create_weight_map(pd.Series(1, index=d12), d1m, d2m)
         self.assertEqual(res[((1,), (2,))], 1)
 
-        res = create_weightmap(pd.Series(1, index=d23), d12, d23)
+        res = create_weight_map(pd.Series(1, index=d23), d12, d23)
         self.assertEqual(res[((1, 2), (2, 4))], 1)
 
-        res = create_weightmap(pd.Series(1, index=d1), 0, d1)
+        res = create_weight_map(pd.Series(1, index=d1), 0, d1)
         self.assertEqual(res[(SCALAR_INDEX_KEY, 1)], 1)
 
-        res = create_weightmap(pd.Series(1, index=d1), d1, d0)
+        res = create_weight_map(pd.Series(1, index=d1), d1, d0)
         self.assertEqual(res[(1, SCALAR_INDEX_KEY)], 1)
 
     def test_is_scalar(self):
@@ -401,17 +401,17 @@ class TestBaseExamples(TestCase):
         s_month = s_month * pd.Series(1, index=idx_region_month)
 
         # auto aggregation => output dimension is only month
-        map = create_weightmap(s_month, s_region.index)
-        res = transform(VT_NumericExt, s_region, weight_map=map)
+        res = transform_ds(VT_NumericExt, s_region, weights=s_month)
         self.assertAlmostEqual(res["1"], 16)
 
         # use size_t with index only:
-        map = create_weightmap(s_month, s_region.index, idx_region_month)
-        res = transform(VT_NumericExt, s_region, weight_map=map)
+        res = transform_ds(
+            VT_NumericExt, s_region, weights=s_month, dim_out=idx_region_month
+        )
         self.assertAlmostEqual(res[("a", "1")], 4)
 
         self.assertRaises(
-            Exception, create_weightmap, s_month, s_region.index, idx_hour
+            Exception, create_weight_map, s_month, s_region.index, idx_hour
         )
 
     def test_ex_2(self):
@@ -441,9 +441,7 @@ class TestBaseExamples(TestCase):
         d_region = Series({"r1": 100, "r2": 200}, index=dim_region)
 
         # use extensive disaggregation:
-        map = create_weightmap(w_region_subregion, d_region.index)
-        d_subregion = transform(VT_NumericExt, d_region, weight_map=map)
-        d_subregion = create_result_wrapper(map)(d_subregion)
+        d_subregion = transform_ds(VT_NumericExt, d_region, weights=w_region_subregion)
 
         self.assertEqual(d_subregion.index.name, "subregion")
         self.assertEqual(
@@ -452,9 +450,7 @@ class TestBaseExamples(TestCase):
         )
 
         # applying the same weight map aggregates it back.
-        map = create_weightmap(w_region_subregion, d_subregion.index)
-        d_region2 = transform(VT_NumericExt, d_subregion, weight_map=map)
-        d_region2 = create_result_wrapper(map)(d_region2)
+        d_region2 = transform_ds(VT_NumericExt, d_subregion, weights=w_region_subregion)
 
         self.assertEqual(d_region2.index.name, "region")
         self.assertEqual(
@@ -464,8 +460,7 @@ class TestBaseExamples(TestCase):
 
         # using Intensive distribution, the values for the regions
         # in the disaggregation are duplicated
-        map = create_weightmap(w_region_subregion, d_subregion.index)
-        d_region2 = transform(VT_Numeric, d_subregion, weight_map=map)
+        d_region2 = transform_ds(VT_Numeric, d_subregion, weights=w_region_subregion)
         self.assertEqual(
             set(d_region2.items()),
             set([("r1", 50), ("r2", 100)]),
@@ -473,9 +468,9 @@ class TestBaseExamples(TestCase):
 
         # distribute over a new dimension (time)
         w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
-        map = create_weightmap(w_time, d_region.index, dim_region_time)
-        s_region_time = transform(VT_NumericExt, d_region, weight_map=map)
-        s_region_time = create_result_wrapper(map)(s_region_time)
+        s_region_time = transform_ds(
+            VT_NumericExt, d_region, weights=w_time, dim_out=dim_region_time
+        )
 
         self.assertEqual(tuple(s_region_time.index.names), ("region", "time"))
         self.assertEqual(
@@ -493,10 +488,7 @@ class TestBaseExamples(TestCase):
         )
 
         # and what about scalar?
-        map = create_weightmap(w_time)
-        scal = Series({SCALAR_INDEX_KEY: 100}, name=SCALAR_DIM_NAME)
-        s_time = transform(VT_NumericExt, scal, weight_map=map)
-        s_time = create_result_wrapper(map)(s_time)
+        s_time = transform_ds(VT_NumericExt, 100, weights=w_time)
         self.assertEqual(s_time.index.name, "time")
         self.assertEqual(
             set(s_time.items()),
@@ -510,6 +502,5 @@ class TestBaseExamples(TestCase):
         )
 
         # ... and back
-        map = create_weightmap(w_time, s_time.index)
-        s = transform(VT_NumericExt, s_time, map)
-        self.assertEqual(s[SCALAR_INDEX_KEY], 100)
+        s = transform_ds(VT_NumericExt, s_time, weights=w_time)
+        self.assertEqual(s, 100)

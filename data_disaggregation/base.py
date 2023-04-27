@@ -95,7 +95,6 @@ def transform(
     threshold: float = 0.0,
     as_int: bool = False,
     validate=True,
-    wrap_result=None,
 ) -> Mapping[T, V]:
     if size_in is None:
         size_in = group_idx_first(weight_map)
@@ -165,9 +164,5 @@ def transform(
         # todo remove checks at the end
         assert is_subset(result, size_out)
         assert is_unique(result)
-
-    # result same type as data:
-    if wrap_result:
-        result = wrap_result(result)
 
     return result

@@ -6,9 +6,8 @@ from typing import List, Mapping, Optional, Tuple, Union
 import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
-from .base import transform
-from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT, F, T, V
-from .utils import as_list, is_list, is_map, is_mapping, is_na, is_scalar
+from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, F, T
+from .utils import is_list, is_na
 
 
 def is_multindex(x: Union[DataFrame, Series, Index, MultiIndex, float]) -> bool:
@@ -136,64 +135,10 @@ def create_weightmap(
     return result
 
 
-def _disagg(
-    vtype: VT,
-    data: Mapping[F, V],
-    weights: Union[Mapping[Tuple[F, T], float], Series],
-    dim_out: Mapping[T, float] = None,
-    dim_in: Mapping[F, float] = None,
-    threshold: float = 0.0,
-    as_int: bool = False,
-) -> Mapping[T, V]:
-    """
-    Args:
-        vtype: data type (impacts aggregation function)
-        data: indexed data
-        weights: weight data
-        size_f (optional):
-        size_t (optional):
-        threshold (optional):
-        as_int (optional):
+def create_result_wrapper(weight_map: Series):
+    index_names = weight_map.index.names
 
-    """
-    if is_scalar(data):
-        data = Series({SCALAR_INDEX_KEY: data}).rename_axis([SCALAR_DIM_NAME])
+    def result_wrapper(result):
+        return Series(result).rename_axis(index_names)
 
-    if not is_map(weights) or isinstance(weights, Series):
-        if is_list(dim_out):
-            idx_out = dim_out
-            dim_out = None
-        elif is_mapping(dim_out):
-            idx_out = as_list(dim_out)
-        elif dim_out is None:
-            idx_out = None
-        else:
-            raise NotImplementedError()
-
-        idx_in = data.index
-
-        weights = create_weightmap(weights, idx_in, idx_out)
-        res_series_names = weights.index.names[1]
-    else:
-        res_series_names = None
-
-    result = transform(
-        vtype=vtype,
-        data=data,
-        weight_map=weights,
-        size_out=dim_out,
-        size_in=dim_in,
-        threshold=threshold,
-        as_int=as_int,
-    )
-
-    # result as series
-    if isinstance(data, pd.Series):
-        res_series_dtype = getattr(data, "dtype", None)
-        result = pd.Series(result, dtype=res_series_dtype).rename_axis(res_series_names)
-
-    # result as scalar
-    if set(result.keys()) == set([SCALAR_INDEX_KEY]):
-        result = result[SCALAR_INDEX_KEY]
-
-    return result
+    return result_wrapper

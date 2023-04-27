@@ -30,3 +30,4 @@ jobs:
           export PY311_PATH=$CONDA/envs/py311/bin
           export PATH=$PATH:$PY37_PATH:$PY311_PATH
           tox # --parallel
+      - uses: codecov/codecov-action@v3

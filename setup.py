@@ -12,7 +12,7 @@ if __name__ == "__main__":
         description="",
         long_description=long_description_md,
         long_description_content_type="text/markdown",
-        version="0.9.1",
+        version="0.9.2",
         author="Christian Winger",
         platforms=["any"],
         license="MIT",

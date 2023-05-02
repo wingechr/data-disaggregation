@@ -48,7 +48,7 @@ Helper to create the mapping
 
 from typing import Mapping, Tuple
 
-from .classes import VT, F, T, V, VT_Numeric, VT_NumericExt
+from .classes import VT, F, T, V, VT_NumericExt
 from .utils import (
     group_idx_first,
     group_idx_second,
@@ -93,7 +93,6 @@ def transform(
     size_in: Mapping[F, float] = None,
     size_out: Mapping[T, float] = None,
     threshold: float = 0.0,
-    as_int: bool = False,
     validate=True,
 ) -> Mapping[T, V]:
     if size_in is None:
@@ -107,11 +106,13 @@ def transform(
         assert is_mapping(size_in)
         assert is_unique(size_in)
         assert all(v > 0 for v in iter_values(size_in))
+        # assert all(isinstance(v, (float, int)) for v in iter_values(size_in))
 
         # validate size_t
         assert is_mapping(size_out)
         assert is_unique(size_out)
         assert all(v > 0 for v in iter_values(size_out))
+        # assert all(isinstance(v, (float, int)) for v in iter_values(size_out))
 
         # validate var
         assert is_mapping(data)
@@ -127,6 +128,7 @@ def transform(
         assert all(v >= 0 for v in iter_values(weight_map))
         assert is_subset([x[0] for x in weight_map.keys()], size_in)
         assert is_subset([x[1] for x in weight_map.keys()], size_out)
+        # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
     result = {}
 
@@ -154,11 +156,6 @@ def transform(
             v *= size_out[t]
 
         result[t] = v
-
-    # rounding
-    if as_int:
-        assert issubclass(vtype, VT_Numeric)
-        result = dict((t, round(v)) for t, v in result.items())
 
     if validate:
         # todo remove checks at the end

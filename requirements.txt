@@ -1,2 +1,4 @@
 build
 mkdocs
+mkdocs-material
+mkdocs-jupyter

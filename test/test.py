@@ -195,9 +195,7 @@ class TestBase(TestCase):
 
         var = {"a": 5, "b": 10, "c": 30}
 
-        return transform(
-            vtype=vtype, data=var, weight_map=map, as_int=issubclass(vtype, VT_Numeric)
-        )
+        return transform(vtype=vtype, data=var, weight_map=map)
 
     def test_example_type_categorical(self):
         res = self.get_example(VT_Nominal)
@@ -216,8 +214,12 @@ class TestBase(TestCase):
 
     def test_example_type_metric_ext(self):
         res = self.get_example(VT_NumericExt)
-        for k, v in {"D": round(3.33333333), "E": 20, "F": round(21.6666667)}.items():
-            self.assertEqual(v, res[k])
+        for k, v in {
+            "D": 3.333333333333333333,
+            "E": 20,
+            "F": 21.6666666666666667,
+        }.items():
+            self.assertAlmostEqual(v, res[k])
 
 
 class TestDataframe(TestCase):
@@ -250,19 +252,15 @@ class TestDataframe(TestCase):
                 ("b", "F"): 2,
                 ("c", "E"): 2,
                 ("c", "F"): 1,
-            }
+            },
+            dtype=float,
         )
         s_map.index.names = ["d1", "d2"]
 
         s_var = Series({"a": 5, "b": 10, "c": 30})
         s_var.index.names = ["d1"]
 
-        return transform(
-            weight_map=s_map,
-            data=s_var,
-            vtype=vtype,
-            as_int=issubclass(vtype, VT_Numeric),
-        )
+        return transform(weight_map=s_map, data=s_var, vtype=vtype)
 
     def test_example_type_categorical(self):
         res = self.get_example(VT_Nominal)
@@ -281,8 +279,8 @@ class TestDataframe(TestCase):
 
     def test_example_type_metric_ext(self):
         res = self.get_example(VT_NumericExt)
-        for k, v in {"D": round(3.333), "E": 20, "F": round(21.667)}.items():
-            self.assertEqual(v, res[k])
+        for k, v in {"D": 3.333333333333333, "E": 20, "F": 21.66666666666667}.items():
+            self.assertAlmostEqual(v, res[k])
 
 
 class TestBaseExamples(TestCase):
@@ -374,6 +372,26 @@ class TestBaseExamples(TestCase):
         self.assertEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
         self.assertEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
         self.assertEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)
+
+    def test_int_to_float(self):
+        dim_region = Index(["r1", "r2"], name="region")
+        dim_time = Index(["t1", "t2", "t3"], name="time")
+
+        idcs_in = [dim_region]
+        idcs_out = [dim_time]
+        idcs_weights = [dim_region]
+        vtype = VT_NumericExt
+
+        data = Series(10, index=MultiIndex.from_product(idcs_in))
+        weights = Series(1, index=MultiIndex.from_product(idcs_weights))
+
+        res = transform_ds(
+            vtype=vtype,
+            data=data,
+            weights=weights,
+            dim_out=MultiIndex.from_product(idcs_out),
+        )
+        self.assertAlmostEqual(res.sum(), data.sum())
 
     def test_ex_1(self):
         # create dimensions as pandas Index
@@ -503,3 +521,34 @@ class TestBaseExamples(TestCase):
         # ... and back
         s = transform_ds(VT_NumericExt, s_time, weights=w_time)
         self.assertEqual(s, 100)
+
+    def test_ex_3(self):
+        d_region = Index(["r1", "r2"], name="region")
+        d_subregion = Index(["r11", "r12", "r21", "r22"], name="subregion")
+        d_time = Index(["t1", "t2", "t3"], name="time")
+        # d_sector = Index(["s1", "s2"], name="sector")
+        # d_sector_b = Index(["sb1", "sb2", "sb3"], name="sector_b")
+
+        # s_region_subregion = Series(
+        #    {("r1", "r11"): 1, ("r1", "r12"): 1, ("r2", "r21"): 1, ("r2", "r22"): 1},
+        #    index=MultiIndex.from_product([d_region, d_subregion]),
+        # )
+        # s_region_subregion = Series(
+        #    dict(((sr[:2], sr), 1) for sr in d_subregion),
+        # ).rename_axis(["region", "subregion"])
+
+        s_region = Series({"r1": 100, "r2": 200}, index=d_region)
+        s_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=d_time)
+
+        res = transform_ds(
+            vtype=VT_NumericExt,
+            data=s_region,
+            weights=s_time,
+            dim_out=MultiIndex.from_product([d_region, d_time]),
+        )
+
+        from math import isclose
+
+        MultiIndex.from_product([d_region, d_subregion, d_time])
+
+        assert isclose(res.sum(), s_region.sum())

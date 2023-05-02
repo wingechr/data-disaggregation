@@ -1,4 +1,4 @@
-# Data (dis)aggregation
+# DataDisAggregation
 
 ![](https://img.shields.io/github/license/wingechr/data-disaggregation)
 ![](https://img.shields.io/pypi/pyversions/data-disaggregation)

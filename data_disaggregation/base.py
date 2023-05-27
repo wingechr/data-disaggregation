@@ -138,7 +138,7 @@ def transform(
         # weights sum
         sumw = sum(w for _, w in vws)
         # TODO drop test
-        sumw <= size_out[t]
+        assert sumw <= size_out[t]
 
         # drop result?
         if threshold:

@@ -146,6 +146,11 @@ def create_weight_map(
         key_in = get_key(row, from_level_idcs, from_is_multindex)
         key_out = get_key(row, to_level_idcs, to_is_multindex)
 
+        if key_in not in idx_in:
+            continue
+        if key_out not in idx_out:
+            continue
+
         key = (key_in, key_out)
         result[key] = val_map
 

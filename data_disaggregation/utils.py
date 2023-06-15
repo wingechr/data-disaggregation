@@ -137,6 +137,10 @@ def iter_values(x):
         yield x[k]
 
 
+def as_set(x) -> set:
+    return set(as_list(x))
+
+
 def as_list(x) -> List:
     # meaning: is index
     if is_list(x):

@@ -50,6 +50,7 @@ from typing import Mapping, Tuple
 
 from .classes import VT, F, T, V, VT_NumericExt
 from .utils import (
+    as_set,
     group_idx_first,
     group_idx_second,
     is_map,
@@ -118,9 +119,11 @@ def transform(
         assert is_mapping(data)
         assert is_unique(data)
 
-        assert is_subset(
-            data, size_in
-        ), "Variable index is not a subset of input dimension subset"
+        if not is_subset(data, size_in):
+            err = as_set(data) - as_set(size_in)
+            raise Exception(
+                f"Variable index is not a subset of input dimension subset: {err}"
+            )
 
         # validate map
         assert is_map(weight_map)
@@ -138,7 +141,7 @@ def transform(
         # weights sum
         sumw = sum(w for _, w in vws)
         # TODO drop test
-        sumw <= size_out[t]
+        assert sumw <= size_out[t]
 
         # drop result?
         if threshold:

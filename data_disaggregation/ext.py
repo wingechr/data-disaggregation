@@ -63,13 +63,36 @@ def get_idx_out(
         return Index(to_levels_values[0], name=to_levels_names[0])
 
 
+def as_index(x) -> Index:
+    if isinstance(x, Index):
+        return x
+    elif isinstance(x, Series):
+        return x.index
+
+    raise TypeError(f"Must be of type Index instead of {type(x).__name__}")
+
+
+def as_series(x) -> Series:
+    if isinstance(x, Series):
+        return x
+    elif isinstance(x, Index):
+        return Series(1.0, index=x)
+
+    raise TypeError("Must be of type Series")
+
+
 def create_weight_map(
     weights: Series,
     idx_in: Index,
     idx_out: Index = None,
 ) -> Mapping[Tuple[F, T], float]:
+    weights = as_series(weights)
+    idx_in = as_index(idx_in)
+
     if idx_out is None:
         idx_out = get_idx_out(weights, idx_in)
+    # else:
+    #    idx_out = as_index(idx_out)
 
     map_levels = get_dimension_levels(weights)
     map_is_multindex = is_multindex(weights)
@@ -122,6 +145,11 @@ def create_weight_map(
         # get in/out keys
         key_in = get_key(row, from_level_idcs, from_is_multindex)
         key_out = get_key(row, to_level_idcs, to_is_multindex)
+
+        if key_in not in idx_in:
+            continue
+        if key_out not in idx_out:
+            continue
 
         key = (key_in, key_out)
         result[key] = val_map

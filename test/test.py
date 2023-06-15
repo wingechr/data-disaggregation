@@ -116,22 +116,19 @@ class TestUtils(TestCase):
         d3 = Index([4], name="d3")
         d23 = MultiIndex.from_product([d2, d3])
 
-        res = create_weight_map(Series(1, index=d12), d1, d2)
+        res = create_weight_map(Series(1, index=d12), idx_in=d1, idx_out=d2)
         self.assertEqual(res[(1, 2)], 1)
 
-        res = create_weight_map(Series(1, index=d12), d1m, d2)
+        res = create_weight_map(Series(1, index=d12), idx_in=d1m, idx_out=d2)
         self.assertEqual(res[((1,), 2)], 1)
 
-        res = create_weight_map(Series(1, index=d12), d1m, d2m)
+        res = create_weight_map(Series(1, index=d12), idx_in=d1m, idx_out=d2m)
         self.assertEqual(res[((1,), (2,))], 1)
 
-        res = create_weight_map(Series(1, index=d23), d12, d23)
+        res = create_weight_map(Series(1, index=d23), idx_in=d12, idx_out=d23)
         self.assertEqual(res[((1, 2), (2, 4))], 1)
 
-        res = create_weight_map(Series(1, index=d1), 0, d1)
-        self.assertEqual(res[(SCALAR_INDEX_KEY, 1)], 1)
-
-        res = create_weight_map(Series(1, index=d1), d1, d0)
+        res = create_weight_map(Series(1, index=d1), idx_in=d1, idx_out=d0)
         self.assertEqual(res[(1, SCALAR_INDEX_KEY)], 1)
 
     def test_is_scalar(self):

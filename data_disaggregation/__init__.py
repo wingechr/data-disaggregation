@@ -1,4 +1,4 @@
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 # isort: skip_file -> keep order to prevent circular import
 from .ext import transform_ds, create_weight_map

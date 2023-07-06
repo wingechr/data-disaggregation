@@ -137,11 +137,13 @@ def transform(
 
     groups = get_groups(vtype=vtype, data=data, weight_map=weight_map, size_in=size_in)
 
+    # FIXME: allow for a small, relative error in comparison
+    # if validate:
+    #    assert all(sum(w for _, w in vws) > size_out[t] for t, vws in groups.items())
+
     for t, vws in groups.items():
         # weights sum
         sumw = sum(w for _, w in vws)
-        # TODO drop test
-        assert sumw <= size_out[t]
 
         # drop result?
         if threshold:

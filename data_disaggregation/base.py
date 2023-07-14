@@ -61,6 +61,8 @@ from .utils import (
     iter_values,
 )
 
+VALIDATE_EQ_REL_TOLERANCE = 1e-10
+
 
 def get_groups(
     vtype: VT,
@@ -68,20 +70,22 @@ def get_groups(
     weight_map: Mapping[Tuple[F, T], float],
     size_in: Mapping[F, float],
 ) -> Mapping[T, Tuple[V, float]]:
-    result = {}
+    # filter nan in data
+    data = dict((f, v) for f, v in data.items() if not is_na(v))
 
+    #  scale extensive => intensive
+    if vtype == VT_NumericExt:
+        data = dict((f, v / size_in[f]) for f, v in data.items())
+
+    # filter unused in weight_map:
+    weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
+
+    # init results
+    result = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
+
+    # group data
     for (f, t), w in weight_map.items():
-        # get not na value
-        v = data.get(f)
-        if is_na(v):
-            continue
-
-        #  scale extensive => intensive
-        if vtype == VT_NumericExt:
-            v /= size_in[f]
-
-        if t not in result:
-            result[t] = []
+        v = data[f]
         result[t].append((v, w))
 
     return result
@@ -133,34 +137,36 @@ def transform(
         assert is_subset([x[1] for x in weight_map.keys()], size_out)
         # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
-    result = {}
-
     groups = get_groups(vtype=vtype, data=data, weight_map=weight_map, size_in=size_in)
 
-    # FIXME: allow for a small, relative error in comparison
-    # if validate:
-    #    assert all(sum(w for _, w in vws) > size_out[t] for t, vws in groups.items())
+    # create weight sums
+    group_sumw = dict((t, sum(w for _, w in vws)) for t, vws in groups.items())
 
+    if validate or threshold:
+        sumw_rel = dict((t, sumw / size_out[t]) for t, sumw in group_sumw.items())
+
+    # sumw always <= size_out ==> sumw_rel < 1
+    if validate:
+        # TODO: add threshold
+        scomp = 1 + VALIDATE_EQ_REL_TOLERANCE
+        assert all(s <= scomp for s in sumw_rel.values()), sumw_rel
+
+    # drop groups under threshold
+    if threshold:
+        groups = dict((t, vws) for t, vws in groups.items() if sumw_rel[t] >= threshold)
+
+    result = {}
     for t, vws in groups.items():
-        # weights sum
-        sumw = sum(w for _, w in vws)
-
-        # drop result?
-        if threshold:
-            if (sumw / size_out[t]) < threshold:
-                continue
-
         # normalize weights
-        vws = [(v, w / sumw) for v, w in vws]
+        vws = [(v, w / group_sumw[t]) for v, w in vws]
 
         # aggregate
-        v = vtype.weighted_aggregate(vws)
+        result[t] = vtype.weighted_aggregate(vws)
 
-        #  re-scale intensive => extensive
-        if vtype == VT_NumericExt:
-            v *= size_out[t]
-
-        result[t] = v
+    #  re-scale intensive => extensive
+    if vtype == VT_NumericExt:
+        for t, v in result.items():
+            result[t] = v * size_out[t]
 
     if validate:
         # todo remove checks at the end

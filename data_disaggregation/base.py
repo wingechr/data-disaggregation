@@ -145,9 +145,9 @@ def transform(
     if validate or threshold:
         sumw_rel = dict((t, sumw / size_out[t]) for t, sumw in group_sumw.items())
 
-    # sumw always <= size_out ==> sumw_rel < 1
+    # sumw always <= size_out ==> sumw_rel <= 1
+    # TODO: maybe drop this check, this should never really happen
     if validate:
-        # TODO: add threshold
         scomp = 1 + VALIDATE_EQ_REL_TOLERANCE
         assert all(s <= scomp for s in sumw_rel.values()), sumw_rel
 

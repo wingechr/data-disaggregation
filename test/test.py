@@ -17,7 +17,7 @@ from data_disaggregation.ext import (
     create_weight_map,
     get_dimension_levels,
     is_multindex,
-    transform_ds,
+    transform_pandas,
 )
 from data_disaggregation.utils import (
     as_mapping,
@@ -396,7 +396,7 @@ class TestBaseExamples(TestCase):
         data = Series(10, index=MultiIndex.from_product(idcs_in))
         weights = Series(1, index=MultiIndex.from_product(idcs_weights))
 
-        res = transform_ds(
+        res = transform_pandas(
             vtype=vtype,
             data=data,
             weights=weights,
@@ -429,11 +429,11 @@ class TestBaseExamples(TestCase):
         s_month = s_month * Series(1, index=idx_region_month)
 
         # auto aggregation => output dimension is only month
-        res = transform_ds(VT_NumericExt, s_region, weights=s_month)
+        res = transform_pandas(VT_NumericExt, s_region, weights=s_month)
         self.assertAlmostEqual(res["1"], 16)
 
         # use size_t with index only:
-        res = transform_ds(
+        res = transform_pandas(
             VT_NumericExt, s_region, weights=s_month, dim_out=idx_region_month
         )
         self.assertAlmostEqual(res[("a", "1")], 4)
@@ -469,7 +469,9 @@ class TestBaseExamples(TestCase):
         d_region = Series({"r1": 100, "r2": 200}, index=dim_region)
 
         # use extensive disaggregation:
-        d_subregion = transform_ds(VT_NumericExt, d_region, weights=w_region_subregion)
+        d_subregion = transform_pandas(
+            VT_NumericExt, d_region, weights=w_region_subregion
+        )
 
         self.assertEqual(d_subregion.index.name, "subregion")
         self.assertEqual(
@@ -478,7 +480,9 @@ class TestBaseExamples(TestCase):
         )
 
         # applying the same weight map aggregates it back.
-        d_region2 = transform_ds(VT_NumericExt, d_subregion, weights=w_region_subregion)
+        d_region2 = transform_pandas(
+            VT_NumericExt, d_subregion, weights=w_region_subregion
+        )
 
         self.assertEqual(d_region2.index.name, "region")
         self.assertEqual(
@@ -488,7 +492,9 @@ class TestBaseExamples(TestCase):
 
         # using Intensive distribution, the values for the regions
         # in the disaggregation are duplicated
-        d_region2 = transform_ds(VT_Numeric, d_subregion, weights=w_region_subregion)
+        d_region2 = transform_pandas(
+            VT_Numeric, d_subregion, weights=w_region_subregion
+        )
         self.assertEqual(
             set(d_region2.items()),
             set([("r1", 50), ("r2", 100)]),
@@ -496,7 +502,7 @@ class TestBaseExamples(TestCase):
 
         # distribute over a new dimension (time)
         w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
-        s_region_time = transform_ds(
+        s_region_time = transform_pandas(
             VT_NumericExt, d_region, weights=w_time, dim_out=dim_region_time
         )
 
@@ -516,7 +522,7 @@ class TestBaseExamples(TestCase):
         )
 
         # and what about scalar?
-        s_time = transform_ds(VT_NumericExt, 100, weights=w_time)
+        s_time = transform_pandas(VT_NumericExt, 100, weights=w_time)
         self.assertEqual(s_time.index.name, "time")
         self.assertEqual(
             set(s_time.items()),
@@ -530,7 +536,7 @@ class TestBaseExamples(TestCase):
         )
 
         # ... and back
-        s = transform_ds(VT_NumericExt, s_time, weights=w_time)
+        s = transform_pandas(VT_NumericExt, s_time, weights=w_time)
         self.assertEqual(s, 100)
 
     def test_ex_3(self):
@@ -551,7 +557,7 @@ class TestBaseExamples(TestCase):
         s_region = Series({"r1": 100, "r2": 200}, index=d_region)
         s_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=d_time)
 
-        res = transform_ds(
+        res = transform_pandas(
             vtype=VT_NumericExt,
             data=s_region,
             weights=s_time,
@@ -563,3 +569,9 @@ class TestBaseExamples(TestCase):
         MultiIndex.from_product([d_region, d_subregion, d_time])
 
         assert isclose(res.sum(), s_region.sum())
+
+    def test_check_no_nan_in_indices(self):
+        data = Series([1, 2], index=Index([0, np.nan], name="i1"))
+        weights = Index([0, np.nan], name="i1")
+
+        transform_pandas(VT_Numeric, data, weights)

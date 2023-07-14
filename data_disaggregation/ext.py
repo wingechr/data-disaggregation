@@ -72,21 +72,39 @@ def as_index(x) -> Index:
     raise TypeError(f"Must be of type Index instead of {type(x).__name__}")
 
 
-def as_series(x) -> Series:
+def as_series(x, default_value=1.0) -> Series:
     if isinstance(x, Series):
         return x
     elif isinstance(x, Index):
-        return Series(1.0, index=x)
+        return Series(default_value, index=x)
 
     raise TypeError("Must be of type Series")
 
 
+def combine_weights(
+    weights: Union[Index, Series, Tuple[Union[Index, Series]]]
+) -> Series:
+    if not isinstance(weights, (tuple, list)):
+        weights = [weights]
+
+    weights = [as_series(w) for w in weights]
+
+    # weights is now a list of Series
+
+    if len(weights) == 1:
+        weights = weights[0]
+    else:
+        raise NotImplementedError()
+
+    return weights
+
+
 def create_weight_map(
-    weights: Series,
+    weights: Union[Index, Series, Tuple[Union[Index, Series]]],
     idx_in: Index,
     idx_out: Index = None,
 ) -> Mapping[Tuple[F, T], float]:
-    weights = as_series(weights)
+    weights = combine_weights(weights)
     idx_in = as_index(idx_in)
 
     if idx_out is None:
@@ -164,15 +182,19 @@ def create_weight_map(
     return result
 
 
-def transform_ds(
+def transform_pandas(
     vtype: VT,
-    data: Series,
-    weights: Series,
+    data: Union[Series, float],
+    weights: Union[Index, Series, Tuple[Union[Index, Series]]],
     dim_in: Union[Index, Series] = None,
     dim_out: Union[Index, Series] = None,
     threshold: float = 0.0,
-    validate=True,
-) -> Series:
+    validate: bool = True,
+) -> Union[Series, float]:
+    # TODO: apply same transformation all Series in DataFrame
+    # to check: how are nan values handled if they are
+    # different in the columns?
+
     if is_scalar(data):
         data = Series(data, index=SCALAR_INDEX)
 
@@ -199,6 +221,9 @@ def transform_ds(
         size_out = None
     else:
         raise NotImplementedError()
+
+    # ensure indices have no nans
+    # assert #hasnans
 
     weight_map = create_weight_map(weights=weights, idx_in=idx_in, idx_out=idx_out)
 

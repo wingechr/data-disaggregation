@@ -156,7 +156,7 @@ def as_mapping(x, default_val=1) -> Mapping:
     if is_mapping(x):
         return x
     elif is_list(x):
-        return dict((x, 1) for k in x)
+        return dict((k, default_val) for k in x)
     elif is_scalar(x):
         return {classes.SCALAR_INDEX_KEY: x}
     raise TypeError(x)

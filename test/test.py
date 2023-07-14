@@ -20,6 +20,7 @@ from data_disaggregation.ext import (
     transform_ds,
 )
 from data_disaggregation.utils import (
+    as_mapping,
     group_idx_first,
     group_sum,
     is_list,
@@ -157,6 +158,19 @@ class TestUtils(TestCase):
         ]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
             self.assertEqual(res, (False, False, True), x)
+
+    def test_as_mapping(self):
+        # is mapping
+        res = as_mapping({"a": 1, "b": 1})
+        self.assertDictEqual(res, {"a": 1, "b": 1})
+
+        # is list
+        res = as_mapping(["a", "b"])
+        self.assertDictEqual(res, {"a": 1, "b": 1})
+
+        # is scalar
+        res = as_mapping(99)
+        self.assertDictEqual(res, {SCALAR_INDEX_KEY: 99})
 
 
 class TestBase(TestCase):

@@ -23,6 +23,7 @@ from data_disaggregation.ext import (
     ensure_multiindex,
     merge_indices,
     remap_series_to_frame,
+    transform_pandas,
 )
 from data_disaggregation.utils import (
     as_mapping,
@@ -475,4 +476,24 @@ class TextExtPandas(TestCase):
         self.assertPandasEqal(
             df_res,
             ensure_multiindex(DataFrame({"v": [1, 1]}, index=Index([1, 1], name="i1"))),
+        )
+
+    def test_transform_pandas_1(self):
+        exp_res = Series(
+            [1 / (2 + 1), 2 / (2 + 1), 2.0],
+            index=MultiIndex.from_tuples([("a",), ("b",), ("c",)], names=["i2"]),
+            name="s1",
+        )
+        self.assertPandasEqal(
+            exp_res,
+            transform_pandas(
+                vtype=VT_NumericExt,
+                data=Series([1, 2], index=Index([0, 1], name="i1"), name="s1"),
+                weights=Series(
+                    [1, 2, 1.5],
+                    index=MultiIndex.from_tuples(
+                        [(0, "a"), (0, "b"), (1, "c")], names=["i1", "i2"]
+                    ),
+                ),
+            ),
         )

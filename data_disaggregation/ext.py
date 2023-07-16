@@ -24,13 +24,15 @@ def harmonize_input_data(data: Union[DataFrame, Series, float]) -> DataFrame:
     if isinstance(data, Series):
         data = data.to_frame()
     # ensure multiindex
-    data = ensure_multiindex(ensure_multiindex)
+    data = ensure_multiindex(data)
     return data
 
 
 def as_multiindex(item: Index) -> MultiIndex:
     if not isinstance(item, MultiIndex):
         item = MultiIndex.from_product([item])
+
+    assert isinstance(item, MultiIndex)
     return item
 
 
@@ -38,6 +40,7 @@ def ensure_multiindex(item: Union[DataFrame, Series]) -> Union[DataFrame, Series
     if not isinstance(item.index, MultiIndex):
         item = item.copy()
         item.index = as_multiindex(item.index)
+    assert isinstance(item.index, MultiIndex)
     return item
 
 
@@ -114,6 +117,7 @@ def format_result(df, input_is_df, output_is_scalar, output_multiindex):
 
 def get_idx_out(idx_in: MultiIndex, idx_weights: MultiIndex) -> MultiIndex:
     idx_all = merge_indices([idx_in, idx_weights])
+    idx_levels = dict(zip(idx_all.names, idx_all.levels))
 
     idx_names_only_in = set(idx_in.names) - set(idx_weights.names)
     idx_names_only_weights = set(idx_weights.names) - set(idx_in.names)
@@ -122,7 +126,8 @@ def get_idx_out(idx_in: MultiIndex, idx_weights: MultiIndex) -> MultiIndex:
     # TODO give user options
     # symmetric difference
     idx_names_out = idx_names_only_in | idx_names_only_weights
-    idx_out = MultiIndex.from_product([idx_all[n] for n in idx_names_out])
+
+    idx_out = MultiIndex.from_product([idx_levels[n] for n in idx_names_out])
 
     return idx_out
 
@@ -210,15 +215,38 @@ def transform_pandas(
     # create weight map
     ds_weight_map = create_weight_map(ds_weights, idx_in, idx_out)
 
+    # TODO: pass checks (is_mapping) for Series
+    # so we dont have to convert to dict
+
     # apply base function
-    df_result = DataFrame(index=ds_size_out.index)
-    for col in df_data:
-        df_result[col.name] = transform(
+    df_result = DataFrame(index=idx_out)
+
+    assert df_result.index.is_unique
+    assert ds_weight_map.index.is_unique
+    dict_weight_map = dict(ds_weight_map)
+
+    if ds_size_in is None:
+        dict_size_in = None
+    else:
+        assert ds_size_in.index.is_unique
+        dict_size_in = dict(ds_size_in)
+
+    if ds_size_out is None:
+        dict_size_out = None
+    else:
+        assert ds_size_out.index.is_unique
+        dict_size_out = dict(ds_size_out)
+
+    for name in df_data.columns:
+        s_col = df_data[name]
+
+        dict_col = dict(s_col)
+        df_result[s_col.name] = transform(
             vtype=vtype,
-            data=col,
-            weight_map=ds_weight_map,
-            size_in=ds_size_in,
-            size_out=ds_size_out,
+            data=dict_col,
+            weight_map=dict_weight_map,
+            size_in=dict_size_in,
+            size_out=dict_size_out,
             threshold=threshold,
             validate=validate,
         )
@@ -226,7 +254,7 @@ def transform_pandas(
     return format_result(
         df_result,
         input_is_df=isinstance(data, DataFrame),
-        output_is_scalar=ds_size_out.index.equals(IDX_SCALAR),
+        output_is_scalar=idx_out.equals(IDX_SCALAR),
         output_multiindex=(
             True if dim_out is None else isinstance(dim_out.index, MultiIndex)
         ),

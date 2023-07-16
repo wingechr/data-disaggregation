@@ -1,7 +1,9 @@
 import logging
+from functools import partial
 from unittest import TestCase
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation.base import transform
@@ -11,6 +13,16 @@ from data_disaggregation.classes import (
     VT_Numeric,
     VT_NumericExt,
     VT_Ordinal,
+)
+from data_disaggregation.ext import (
+    COL_FROM,
+    COL_TO,
+    COL_VAL,
+    combine_weights,
+    create_weight_map,
+    ensure_multiindex,
+    merge_indices,
+    remap_series_to_frame,
 )
 from data_disaggregation.utils import (
     as_mapping,
@@ -320,3 +332,147 @@ class TestBaseExamples(TestCase):
         self.assertAlmostEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
         self.assertAlmostEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
         self.assertAlmostEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)
+
+
+class TextExtPandas(TestCase):
+    def assertPandasEqal(self, left, right):
+        if isinstance(left, Index):
+            method = pd.testing.assert_index_equal
+        elif isinstance(left, Series):
+            method = partial(pd.testing.assert_series_equal, check_dtype=False)
+        elif isinstance(left, DataFrame):
+            method = partial(pd.testing.assert_frame_equal, check_dtype=False)
+        else:
+            raise NotImplementedError()
+
+        self.assertIsNone(method(left, right))
+
+    def test_remap_series_to_frame_1(self):
+        df_res = DataFrame(
+            {"i1": [11, 12], "i2": [21, 22], "i3": [31, 32], "v": [10, np.nan]}
+        )
+        self.assertPandasEqal(
+            df_res,
+            remap_series_to_frame(
+                Series(
+                    [1, 10],
+                    index=MultiIndex.from_tuples(
+                        [(31, 22), (31, 21)], names=["i3", "i2"]
+                    ),
+                ),
+                MultiIndex.from_tuples(
+                    [
+                        (11, 21, 31),  # will match 10
+                        (12, 22, 32),  # will match nothing => nan
+                    ],
+                    names=["i1", "i2", "i3"],
+                ),
+                "v",
+            ),
+        )
+
+    def test_merge_indices(self):
+        idx_res = MultiIndex.from_product(
+            [
+                Index([11], name="i1"),
+                Index([21, 22, 23], name="i2"),
+                Index([31, 32, 33], name="i3"),
+            ]
+        )
+        self.assertPandasEqal(
+            idx_res,
+            merge_indices(
+                [
+                    Series(
+                        np.nan,
+                        index=MultiIndex.from_tuples(
+                            [(11, 21), (11, 22)], names=["i1", "i2"]
+                        ),
+                    ),
+                    MultiIndex.from_tuples(
+                        [(21, 31), (21, 32), (23, 33)], names=["i2", "i3"]
+                    ),
+                ]
+            ),
+        )
+
+    def test_combine_weights_1(self):
+        # no overlap
+        s_res = Series(
+            [2, 3, 2, 3],
+            index=MultiIndex.from_tuples(
+                [(11, 21), (11, 22), (12, 21), (12, 22)], names=["i1", "i2"]
+            ),
+        )
+        self.assertPandasEqal(
+            s_res,
+            combine_weights(
+                [
+                    Index([11, 12], name="i1"),
+                    Series([2, 3], index=Index([21, 22], name="i2")),
+                ]
+            ),
+        )
+
+    def test_combine_weights_2(self):
+        s1 = Series(
+            [2, 3],
+            index=MultiIndex.from_tuples(
+                [(11, 21), (11, 22)],
+                names=["i1", "i2"],
+            ),
+        )
+
+        s2 = Series(
+            [2, 3],
+            index=MultiIndex.from_tuples(
+                [(21, 31), (21, 32)],
+                names=["i2", "i3"],
+            ),
+        )
+
+        # partial overlap
+        s_res = Series(
+            [2 * 2, 2 * 3],
+            index=MultiIndex.from_tuples(
+                [(11, 21, 31), (11, 21, 32)], names=["i1", "i2", "i3"]
+            ),
+        )
+        self.assertPandasEqal(
+            s_res,
+            combine_weights([s1, s2]),
+        )
+
+    def test_create_weight_map(self):
+        idx_in = MultiIndex.from_tuples([(11, 21), (11, 22)], names=["i1", "i2"])
+        idx_out = MultiIndex.from_tuples(
+            [(21, 31), (21, 32), (22, 32)], names=["i2", "i3"]
+        )
+        ds_weights = Series(1, index=MultiIndex.from_tuples([(11,)], names=["i1"]))
+        ds_result = Series(
+            1,
+            index=MultiIndex.from_tuples(
+                [
+                    ((11, 21), (21, 31)),
+                    ((11, 21), (21, 32)),
+                    ((11, 22), (22, 32)),
+                ],
+                names=[COL_FROM, COL_TO],
+            ),
+            name=COL_VAL,
+        )
+
+        self.assertPandasEqal(ds_result, create_weight_map(ds_weights, idx_in, idx_out))
+
+    def test_ensure_multiindex_1(self):
+        df_res = DataFrame(
+            {"v": [1, 1]}, index=MultiIndex.from_tuples([(1,), (1,)], names=["i1"])
+        )
+        self.assertPandasEqal(
+            df_res,
+            ensure_multiindex(df_res),
+        )
+        self.assertPandasEqal(
+            df_res,
+            ensure_multiindex(DataFrame({"v": [1, 1]}, index=Index([1, 1], name="i1"))),
+        )

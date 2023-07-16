@@ -2,6 +2,7 @@
 """
 from typing import List, Tuple, Union
 
+import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
@@ -9,6 +10,9 @@ from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT
 from .utils import is_scalar
 
 IDX_SCALAR = MultiIndex.from_product([Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)])
+COL_VAL = "__WEIGHT__"
+COL_FROM = "__FROM__"
+COL_TO = "__TO__"
 
 
 def harmonize_input_data(data: Union[DataFrame, Series, float]) -> DataFrame:
@@ -32,7 +36,8 @@ def as_multiindex(item: Index) -> MultiIndex:
 
 def ensure_multiindex(item: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
     if not isinstance(item.index, MultiIndex):
-        item = item.set_index(as_multiindex(item.index))
+        item = item.copy()
+        item.index = as_multiindex(item.index)
     return item
 
 
@@ -48,11 +53,13 @@ def as_list_of_series(
 
 
 def merge_indices(items: List[Union[Series, Index]]) -> MultiIndex:
+    """Create product of unions of indices"""
     # ensure items are indices
     items = [it if isinstance(it, Index) else it.index for it in items]
+    items = [as_multiindex(it) for it in items]
     indices = {}
     for it in items:
-        for idx in it.index.levels:
+        for idx in it.levels:
             if idx.name not in indices:
                 indices[idx.name] = idx
             else:
@@ -77,9 +84,13 @@ def combine_weights(
     # multiply all and drop nan
     result = Series(1, index=idx)
     for w in weights:
-        result *= w
+        # IMPORTANT: `result *= w` gives a different result,so DONT Use it
+        result = result * w
+    # multiplications implicit join can change order:
+    result.index = result.index.reorder_levels(idx.names)
+
     # drop nan
-    result = result.dropna()
+    result.dropna(inplace=True)
     return result
 
 
@@ -116,6 +127,24 @@ def get_idx_out(idx_in: MultiIndex, idx_weights: MultiIndex) -> MultiIndex:
     return idx_out
 
 
+def remap_series_to_frame(s: Series, idx: MultiIndex, colname: str) -> DataFrame:
+    assert set(s.index.names) <= set(idx.names)
+    # create sub-index from idx: only columns that are in series
+    # TODO: better way?
+    df_result = DataFrame({colname: np.nan}, index=idx)
+    # convert index into columns
+    df_result.reset_index(inplace=True)
+    # set index to same levels as `s`, but keep columns
+    df_result.set_index(s.index.names, drop=False, inplace=True)
+    df_result = ensure_multiindex(df_result)
+
+    # join in data
+    df_result[colname] = s
+    df_result.reset_index(inplace=True, drop=True)
+
+    return df_result
+
+
 def create_weight_map(
     ds_weights: Series, idx_in: MultiIndex, idx_out: MultiIndex
 ) -> Series:
@@ -123,15 +152,18 @@ def create_weight_map(
     Returns weight Series
     Index is 2 dimensional (F, T), each part is a tuple from idx_in, idx_out
     for overlapping levels: left == right
+
     """
     idx_all = merge_indices([idx_in, idx_out])
     # expand index (TODO: check if weights are dropped??)
-    COL_VAL = "__VALUE__"
-    COL_FROM = "__FROM__"
-    COL_TO = "__TO__"
-    df = ds_weights.reindex(idx_all).to_frame(COL_VAL)
-    df[COL_FROM] = list(zip([df[n] for n in idx_in.names]))
-    df[COL_TO] = list(zip([df[n] for n in idx_out.names]))
+    df = remap_series_to_frame(ds_weights, idx_all, COL_VAL)
+    df[COL_FROM] = list(zip(*[df[n] for n in idx_in.names]))
+    df[COL_TO] = list(zip(*[df[n] for n in idx_out.names]))
+
+    # filter: TODO, faster way?
+    df = df.loc[df[COL_FROM].isin(idx_in)]
+    df = df.loc[df[COL_TO].isin(idx_out)]
+
     ds_weight_map = df.set_index([COL_FROM, COL_TO])[COL_VAL]
     ds_weight_map = ds_weight_map.fillna(0)
 

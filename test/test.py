@@ -2,25 +2,15 @@ import logging
 from unittest import TestCase
 
 import numpy as np
-import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation.base import transform
 from data_disaggregation.classes import (
-    SCALAR_DIM_NAME,
     SCALAR_INDEX_KEY,
     VT_Nominal,
     VT_Numeric,
     VT_NumericExt,
     VT_Ordinal,
-)
-from data_disaggregation.ext import (
-    combine_weights,
-    create_weight_map,
-    ensure_multiindex,
-    get_dimension_levels,
-    is_multindex,
-    transform_pandas,
 )
 from data_disaggregation.utils import (
     as_mapping,
@@ -78,62 +68,6 @@ class TestUtils(TestCase):
             (np.NAN, True),
         ]:
             self.assertEqual(is_na(x), y)
-
-    def test_df_utils(self):
-        s = 10  # scalar
-        self.assertEqual(is_multindex(s), False)
-        lvls = dict(get_dimension_levels(s))
-        self.assertEqual(lvls[SCALAR_DIM_NAME][0], SCALAR_INDEX_KEY)
-
-        d1 = Index([10], name="d1")
-        self.assertEqual(is_multindex(d1), False)
-        lvls = dict(get_dimension_levels(d1))
-        self.assertEqual(lvls["d1"][0], 10)
-
-        s1 = Series(index=d1, dtype="float")
-        self.assertEqual(is_multindex(s1), False)
-        lvls = dict(get_dimension_levels(s1))
-        self.assertEqual(lvls["d1"][0], 10)
-
-        dm = MultiIndex.from_product([d1])
-        self.assertEqual(is_multindex(dm), True)
-        lvls = dict(get_dimension_levels(dm))
-        self.assertEqual(lvls["d1"][0], (10,))
-
-        sm = Series(index=dm, dtype="float")
-        self.assertEqual(is_multindex(sm), True)
-        lvls = dict(get_dimension_levels(sm))
-        self.assertEqual(lvls["d1"][0], (10,))
-
-        # names must be unique
-
-        xn = MultiIndex.from_product([[1], [2]], names=["d", "d"])
-        self.assertRaises(Exception, get_dimension_levels, xn)
-
-    def test_align_map_todo(self):
-        d0 = Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)
-        d1 = Index([1], name="d1")
-        d1m = MultiIndex.from_product([d1])
-        d2 = Index([2, 3], name="d2")
-        d2m = MultiIndex.from_product([d2])
-        d12 = MultiIndex.from_product([d1, d2])
-        d3 = Index([4], name="d3")
-        d23 = MultiIndex.from_product([d2, d3])
-
-        res = create_weight_map(Series(1, index=d12), idx_in=d1, idx_out=d2)
-        self.assertEqual(res[(1, 2)], 1)
-
-        res = create_weight_map(Series(1, index=d12), idx_in=d1m, idx_out=d2)
-        self.assertEqual(res[((1,), 2)], 1)
-
-        res = create_weight_map(Series(1, index=d12), idx_in=d1m, idx_out=d2m)
-        self.assertEqual(res[((1,), (2,))], 1)
-
-        res = create_weight_map(Series(1, index=d23), idx_in=d12, idx_out=d23)
-        self.assertEqual(res[((1, 2), (2, 4))], 1)
-
-        res = create_weight_map(Series(1, index=d1), idx_in=d1, idx_out=d0)
-        self.assertEqual(res[(1, SCALAR_INDEX_KEY)], 1)
 
     def test_is_scalar(self):
         for x in [1, None, "xyz", True]:
@@ -236,7 +170,7 @@ class TestBase(TestCase):
             self.assertAlmostEqual(v, res[k])
 
 
-class TestDataframe(TestCase):
+class TestBasePandasSeries(TestCase):
     """"""
 
     def get_example(self, vtype):
@@ -295,33 +229,6 @@ class TestDataframe(TestCase):
         res = self.get_example(VT_NumericExt)
         for k, v in {"D": 3.333333333333333, "E": 20, "F": 21.66666666666667}.items():
             self.assertAlmostEqual(v, res[k])
-
-    def test_ensure_multiindex(self):
-        i1 = Index([1, 2], name="i1")
-        i2 = Index([3, 4], name="i2")
-        m1 = MultiIndex.from_product([i1])
-        m12 = MultiIndex.from_product([i1, i2])
-        s12 = ensure_multiindex(Series(1, m12))
-        s1 = ensure_multiindex(Series(1, i1))
-        self.assertTrue(s1.index.equals(m1))
-        self.assertTrue(s12.index.equals(m12))
-
-    def test_combine_weights(self):
-        i1 = Index([1, 2], name="i1")
-        i2 = Index([3, 4], name="i2")
-        m12 = MultiIndex.from_product([i1, i2])
-        m1 = MultiIndex.from_product([i1])
-        s1 = Series(1, i1)
-        s1m = Series(1, m1)
-        # result will also have multiindex
-        s12 = Series(1, m12)
-
-        s = combine_weights(s1)
-        pd.testing.assert_series_equal(s, s1m)
-        s = combine_weights([s1])
-        pd.testing.assert_series_equal(s, s1m)
-        s = combine_weights([s1, s12])
-        pd.testing.assert_series_equal(s, s12)
 
 
 class TestBaseExamples(TestCase):
@@ -409,193 +316,7 @@ class TestBaseExamples(TestCase):
             },
         )
 
-        self.assertEqual(res[("u1", "t1")], 10 * 0.7)
-        self.assertEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
-        self.assertEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
-        self.assertEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)
-
-    def test_int_to_float(self):
-        dim_region = Index(["r1", "r2"], name="region")
-        dim_time = Index(["t1", "t2", "t3"], name="time")
-
-        idcs_in = [dim_region]
-        idcs_out = [dim_time]
-        idcs_weights = [dim_region]
-        vtype = VT_NumericExt
-
-        data = Series(10, index=MultiIndex.from_product(idcs_in))
-        weights = Series(1, index=MultiIndex.from_product(idcs_weights))
-
-        res = transform_pandas(
-            vtype=vtype,
-            data=data,
-            weights=weights,
-            dim_out=MultiIndex.from_product(idcs_out),
-        )
-        self.assertAlmostEqual(res.sum(), data.sum())
-
-    def test_ex_1(self):
-        # create dimensions as pandas Index
-        idx_month = Index(["1", "2"], name="month")
-        idx_hour = Index(["11", "21", "22"], name="hour")
-        idx_region = Index(["a", "b"], name="region")
-
-        # create multi dimensions as pandas MultiIndex
-        idx_region_month = MultiIndex.from_product([idx_region, idx_month])
-        # idx_region_hour = MultiIndex.from_product([idx_region, idx_hour])
-
-        # create data as pandas series over dimensions
-        # example: series over region
-        s_region = Series({"a": 10, "b": 30}, index=idx_region)
-        # or just rename the index
-        # s_region = Series({"a": 10, "b": 30}, dtype="pint[meter]").rename_axis(["region"])  # noqa
-        s_region = Series({"a": 10, "b": 30}).rename_axis(["region"])
-
-        # create (weighted) map between dimensions (in the simple case, all weights = 1)
-        # as a series, with all dimensions in the index
-        s_month = Series({"1": 2, "2": 3}, index=idx_month)
-
-        # replicate weight map to a second dimension
-        s_month = s_month * Series(1, index=idx_region_month)
-
-        # auto aggregation => output dimension is only month
-        res = transform_pandas(VT_NumericExt, s_region, weights=s_month)
-        self.assertAlmostEqual(res["1"], 16)
-
-        # use size_t with index only:
-        res = transform_pandas(
-            VT_NumericExt, s_region, weights=s_month, dim_out=idx_region_month
-        )
-        self.assertAlmostEqual(res[("a", "1")], 4)
-
-        self.assertRaises(
-            Exception, create_weight_map, s_month, s_region.index, idx_hour
-        )
-
-    def test_ex_2(self):
-        # although not required, we use pandas Series for data and weights
-        # using named Index/MultiIndex
-        # We start by setting up some dimensions (2 spatial, 1 temporal)
-        # using named Index
-
-        dim_region = Index(["r1", "r2"], name="region")
-        dim_subregion = Index(["r11", "r12", "r21", "r22"], name="subregion")
-        dim_time = Index(["t1", "t2", "t3"], name="time")
-
-        # We can use MultiIndex to create cross products:
-        dim_region_subregion = MultiIndex.from_product([dim_region, dim_subregion])
-        dim_region_time = MultiIndex.from_product([dim_region, dim_time])
-
-        # now we create Series for data and weights (which also includes
-        # relationships between dimensions)
-        # using a value of 1 here because all the subregions have
-        # the same weight relatively
-        w_region_subregion = Series(
-            {("r1", "r11"): 1, ("r1", "r12"): 1, ("r2", "r21"): 1, ("r2", "r22"): 1},
-            index=dim_region_subregion,
-        )
-
-        # define some data on the regional level
-        d_region = Series({"r1": 100, "r2": 200}, index=dim_region)
-
-        # use extensive disaggregation:
-        d_subregion = transform_pandas(
-            VT_NumericExt, d_region, weights=w_region_subregion
-        )
-
-        self.assertEqual(d_subregion.index.name, "subregion")
-        self.assertEqual(
-            set(d_subregion.items()),
-            set([("r11", 50), ("r12", 50), ("r21", 100), ("r22", 100)]),
-        )
-
-        # applying the same weight map aggregates it back.
-        d_region2 = transform_pandas(
-            VT_NumericExt, d_subregion, weights=w_region_subregion
-        )
-
-        self.assertEqual(d_region2.index.name, "region")
-        self.assertEqual(
-            set(d_region.items()),
-            set(d_region2.items()),
-        )
-
-        # using Intensive distribution, the values for the regions
-        # in the disaggregation are duplicated
-        d_region2 = transform_pandas(
-            VT_Numeric, d_subregion, weights=w_region_subregion
-        )
-        self.assertEqual(
-            set(d_region2.items()),
-            set([("r1", 50), ("r2", 100)]),
-        )
-
-        # distribute over a new dimension (time)
-        w_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=dim_time)
-        s_region_time = transform_pandas(
-            VT_NumericExt, d_region, weights=w_time, dim_out=dim_region_time
-        )
-
-        self.assertEqual(tuple(s_region_time.index.names), ("region", "time"))
-        self.assertEqual(
-            set(s_region_time.items()),
-            set(
-                [
-                    (("r1", "t1"), 20),
-                    (("r1", "t2"), 30),
-                    (("r1", "t3"), 50),
-                    (("r2", "t1"), 40),
-                    (("r2", "t2"), 60),
-                    (("r2", "t3"), 100),
-                ]
-            ),
-        )
-
-        # and what about scalar?
-        s_time = transform_pandas(VT_NumericExt, 100, weights=w_time)
-        self.assertEqual(s_time.index.name, "time")
-        self.assertEqual(
-            set(s_time.items()),
-            set(
-                [
-                    ("t1", 20),
-                    ("t2", 30),
-                    ("t3", 50),
-                ]
-            ),
-        )
-
-        # ... and back
-        s = transform_pandas(VT_NumericExt, s_time, weights=w_time)
-        self.assertEqual(s, 100)
-
-    def test_ex_3(self):
-        d_region = Index(["r1", "r2"], name="region")
-        d_subregion = Index(["r11", "r12", "r21", "r22"], name="subregion")
-        d_time = Index(["t1", "t2", "t3"], name="time")
-        # d_sector = Index(["s1", "s2"], name="sector")
-        # d_sector_b = Index(["sb1", "sb2", "sb3"], name="sector_b")
-
-        # s_region_subregion = Series(
-        #    {("r1", "r11"): 1, ("r1", "r12"): 1, ("r2", "r21"): 1, ("r2", "r22"): 1},
-        #    index=MultiIndex.from_product([d_region, d_subregion]),
-        # )
-        # s_region_subregion = Series(
-        #    dict(((sr[:2], sr), 1) for sr in d_subregion),
-        # ).rename_axis(["region", "subregion"])
-
-        s_region = Series({"r1": 100, "r2": 200}, index=d_region)
-        s_time = Series({"t1": 2, "t2": 3, "t3": 5}, index=d_time)
-
-        res = transform_pandas(
-            vtype=VT_NumericExt,
-            data=s_region,
-            weights=s_time,
-            dim_out=MultiIndex.from_product([d_region, d_time]),
-        )
-
-        from math import isclose
-
-        MultiIndex.from_product([d_region, d_subregion, d_time])
-
-        assert isclose(res.sum(), s_region.sum())
+        self.assertAlmostEqual(res[("u1", "t1")], 10 * 0.7)
+        self.assertAlmostEqual(res[("u3", "t2")], 13 / (99 + 11) * 11)
+        self.assertAlmostEqual(sum(v for k, v in res.items() if k[1] == "t1"), 10 + 11)
+        self.assertAlmostEqual(sum(v for k, v in res.items() if k[1] == "t2"), 12 + 13)

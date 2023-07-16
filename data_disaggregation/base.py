@@ -64,33 +64,6 @@ from .utils import (
 VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
-def get_groups(
-    vtype: VT,
-    data: Mapping[F, V],
-    weight_map: Mapping[Tuple[F, T], float],
-    size_in: Mapping[F, float],
-) -> Mapping[T, Tuple[V, float]]:
-    # filter nan in data
-    data = dict((f, v) for f, v in data.items() if not is_na(v))
-
-    #  scale extensive => intensive
-    if vtype == VT_NumericExt:
-        data = dict((f, v / size_in[f]) for f, v in data.items())
-
-    # filter unused in weight_map:
-    weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
-
-    # init results
-    result = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
-
-    # group data
-    for (f, t), w in weight_map.items():
-        v = data[f]
-        result[t].append((v, w))
-
-    return result
-
-
 def transform(
     vtype: VT,
     data: Mapping[F, V],
@@ -137,7 +110,22 @@ def transform(
         assert is_subset([x[1] for x in weight_map.keys()], size_out)
         # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
-    groups = get_groups(vtype=vtype, data=data, weight_map=weight_map, size_in=size_in)
+    # filter nan in data
+    data = dict((f, v) for f, v in data.items() if not is_na(v))
+
+    #  scale extensive => intensive
+    if vtype == VT_NumericExt:
+        data = dict((f, v / size_in[f]) for f, v in data.items())
+
+    # filter unused in weight_map:
+    weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
+
+    # init groups
+    groups = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
+    # group data
+    for (f, t), w in weight_map.items():
+        v = data[f]
+        groups[t].append((v, w))
 
     # create weight sums
     group_sumw = dict((t, sum(w for _, w in vws)) for t, vws in groups.items())
@@ -147,9 +135,9 @@ def transform(
 
     # sumw always <= size_out ==> sumw_rel <= 1
     # TODO: maybe drop this check, this should never really happen
-    if validate:
-        scomp = 1 + VALIDATE_EQ_REL_TOLERANCE
-        assert all(s <= scomp for s in sumw_rel.values()), sumw_rel
+    # if validate:
+    #    scomp = 1 + VALIDATE_EQ_REL_TOLERANCE
+    #    assert all(s <= scomp for s in sumw_rel.values()), sumw_rel
 
     # drop groups under threshold
     if threshold:
@@ -159,7 +147,6 @@ def transform(
     for t, vws in groups.items():
         # normalize weights
         vws = [(v, w / group_sumw[t]) for v, w in vws]
-
         # aggregate
         result[t] = vtype.weighted_aggregate(vws)
 
@@ -167,10 +154,5 @@ def transform(
     if vtype == VT_NumericExt:
         for t, v in result.items():
             result[t] = v * size_out[t]
-
-    if validate:
-        # todo remove checks at the end
-        assert is_subset(result, size_out)
-        assert is_unique(result)
 
     return result

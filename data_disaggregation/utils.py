@@ -3,6 +3,8 @@
 import math
 from typing import Callable, List, Mapping, Tuple
 
+from pandas import DataFrame, Index, Series
+
 from . import classes
 
 
@@ -116,11 +118,11 @@ def is_scalar(x) -> bool:
 
 
 def is_list(x) -> bool:
-    return hasattr(x, "__iter__") and not is_scalar(x) and not is_mapping(x)
+    return isinstance(x, (list, tuple, set, Index))
 
 
 def is_mapping(x) -> bool:
-    return hasattr(x, "keys")
+    return isinstance(x, (dict, Series, DataFrame))
 
 
 def is_unique(x) -> bool:
@@ -146,7 +148,7 @@ def as_list(x) -> List:
     if is_list(x):
         return x
     elif is_mapping(x):
-        if hasattr(x, "index"):
+        if isinstance(x, (DataFrame, Series)):
             return x.index
         return list(x.keys())  # TODO maybe wrap in list
     raise TypeError(x)

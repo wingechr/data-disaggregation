@@ -85,7 +85,7 @@ class TestUtils(TestCase):
     def test_is_scalar(self):
         for x in [1, None, "xyz", True]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
-            self.assertEqual(res, (True, False, False), x)
+            self.assertEqual(res, (True, False, False), repr(x))
 
     def test_is_list(self):
         for x in [

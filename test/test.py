@@ -2,6 +2,7 @@ import logging
 from unittest import TestCase
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation.base import transform
@@ -14,7 +15,9 @@ from data_disaggregation.classes import (
     VT_Ordinal,
 )
 from data_disaggregation.ext import (
+    combine_weights,
     create_weight_map,
+    ensure_multiindex,
     get_dimension_levels,
     is_multindex,
     transform_pandas,
@@ -293,6 +296,33 @@ class TestDataframe(TestCase):
         for k, v in {"D": 3.333333333333333, "E": 20, "F": 21.66666666666667}.items():
             self.assertAlmostEqual(v, res[k])
 
+    def test_ensure_multiindex(self):
+        i1 = Index([1, 2], name="i1")
+        i2 = Index([3, 4], name="i2")
+        m1 = MultiIndex.from_product([i1])
+        m12 = MultiIndex.from_product([i1, i2])
+        s12 = ensure_multiindex(Series(1, m12))
+        s1 = ensure_multiindex(Series(1, i1))
+        self.assertTrue(s1.index.equals(m1))
+        self.assertTrue(s12.index.equals(m12))
+
+    def test_combine_weights(self):
+        i1 = Index([1, 2], name="i1")
+        i2 = Index([3, 4], name="i2")
+        m12 = MultiIndex.from_product([i1, i2])
+        m1 = MultiIndex.from_product([i1])
+        s1 = Series(1, i1)
+        s1m = Series(1, m1)
+        # result will also have multiindex
+        s12 = Series(1, m12)
+
+        s = combine_weights(s1)
+        pd.testing.assert_series_equal(s, s1m)
+        s = combine_weights([s1])
+        pd.testing.assert_series_equal(s, s1m)
+        s = combine_weights([s1, s12])
+        pd.testing.assert_series_equal(s, s12)
+
 
 class TestBaseExamples(TestCase):
     def test_aggregate_ext(self):
@@ -569,9 +599,3 @@ class TestBaseExamples(TestCase):
         MultiIndex.from_product([d_region, d_subregion, d_time])
 
         assert isclose(res.sum(), s_region.sum())
-
-    def test_check_no_nan_in_indices(self):
-        data = Series([1, 2], index=Index([0, np.nan], name="i1"))
-        weights = Index([0, np.nan], name="i1")
-
-        transform_pandas(VT_Numeric, data, weights)

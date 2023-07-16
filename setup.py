@@ -7,7 +7,7 @@ if __name__ == "__main__":
     setup(
         packages=["data_disaggregation"],
         name="data-disaggregation",
-        install_requires=["pandas"],
+        install_requires=["pandas>=2.0"],
         keywords=[],
         description="",
         long_description=long_description_md,

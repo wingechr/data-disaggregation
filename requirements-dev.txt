@@ -1,0 +1,10 @@
+pandas>=2.0
+
+tox
+black
+flake8
+pre-commit
+mkdocs
+mkdocs-material
+mkdocs-jupyter
+jupyter

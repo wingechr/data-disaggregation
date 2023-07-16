@@ -3,6 +3,8 @@
 from itertools import product
 from typing import List, Mapping, Tuple, Union
 
+import numpy as np
+import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
@@ -38,13 +40,11 @@ def get_dimension_levels(
         return [(x.name, x.values)]
 
 
-def get_idx_out(
-    weights: Series, i_out: Union[DataFrame, Series, Index, MultiIndex, float]
-):
+def get_idx_out(i_weights: MultiIndex, i_in: MultiIndex, i_out: MultiIndex = None):
     """ """
     map_levels = get_dimension_levels(weights)
 
-    from_levels = get_dimension_levels(i_out)
+    from_levels = get_dimension_levels(i_in)
     from_level_names = [x[0] for x in from_levels]
 
     # determine out from difference (in - map)
@@ -81,22 +81,59 @@ def as_series(x, default_value=1.0) -> Series:
     raise TypeError("Must be of type Series")
 
 
+def ensure_multiindex(s: Series) -> Series:
+    if not isinstance(s.index, MultiIndex):
+        # replace index
+        s = Series(s.values, MultiIndex.from_product([s.index]))
+    return s
+
+
+def ensure_scalar_dim(s: Series) -> Series:
+    if not SCALAR_DIM_NAME in s.index.names:
+        s = pd.concat([s], keys=[SCALAR_INDEX_KEY], names=[SCALAR_DIM_NAME])
+    return s
+
+
 def combine_weights(
     weights: Union[Index, Series, Tuple[Union[Index, Series]]]
 ) -> Series:
+    """combine series by multiplying
+
+    Args:
+        weights (Union[Index, Series, Tuple[Union[Index, Series]]]): _description_
+
+    Raises:
+        NotImplementedError: _description_
+
+    Returns:
+        Series: _description_
+    """
     if not isinstance(weights, (tuple, list)):
         weights = [weights]
 
     weights = [as_series(w) for w in weights]
 
-    # weights is now a list of Series
+    # all series must have MultiIndex ?
+    weights = [ensure_multiindex(w) for w in weights]
 
     if len(weights) == 1:
-        weights = weights[0]
-    else:
-        raise NotImplementedError()
+        return weights[0]
 
-    return weights
+    # all series must have scalar dimension (for joining)
+    has_scalar_dim = any(SCALAR_DIM_NAME in w.index.names for w in weights)
+    weights = [ensure_scalar_dim(w) for w in weights]
+
+    # now multiply all
+
+    result = weights[0]
+    for w in weights[1:]:
+        result = result * w
+
+    # drop scalar dimension
+    if not has_scalar_dim:
+        result = Series(result.values, result.index.droplevel(SCALAR_DIM_NAME))
+
+    return result
 
 
 def create_weight_map(
@@ -107,10 +144,7 @@ def create_weight_map(
     weights = combine_weights(weights)
     idx_in = as_index(idx_in)
 
-    if idx_out is None:
-        idx_out = get_idx_out(weights, idx_in)
-    # else:
-    #    idx_out = as_index(idx_out)
+    idx_out = get_idx_out(weights.index, idx_in, idx_out)
 
     map_levels = get_dimension_levels(weights)
     map_is_multindex = is_multindex(weights)

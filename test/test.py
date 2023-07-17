@@ -497,3 +497,7 @@ class TextExtPandas(TestCase):
             exp_res,
             res,
         )
+        self.assertPandasEqal(
+            exp_res.to_frame("V"),
+            res.to_frame("V"),
+        )

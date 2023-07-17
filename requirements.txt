@@ -1,5 +1,6 @@
 pandas
 
+# dev
 tox
 black
 flake8
@@ -8,3 +9,6 @@ mkdocs
 mkdocs-material
 mkdocs-jupyter
 jupyter
+
+# build/deploy: for auto deploy on github
+build

@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.x"
           cache: "pip" # caching pip dependencies
-      - run: pip install --upgrade -r requirements-dev.txt
+      - run: pip install --upgrade -r requirements.txt
       - run: python -m build --sdist --wheel --outdir dist/
       - run: mkdocs gh-deploy --force
       - uses: pypa/gh-action-pypi-publish@release/v1

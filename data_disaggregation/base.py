@@ -113,7 +113,10 @@ def transform(
 
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
-        data = dict((f, v / size_in[f]) for f, v in data.items())
+        try:
+            data = dict((f, v / size_in[f]) for f, v in data.items())
+        except TypeError:
+            raise Exception(data)
 
     # filter unused in weight_map: input:
     weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)

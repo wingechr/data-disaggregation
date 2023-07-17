@@ -84,15 +84,11 @@ def transform(
         assert is_mapping(size_in)
         assert is_unique(size_in)
         assert all(v > 0 for v in iter_values(size_in))
-        # assert all(isinstance(v, (float, int)) for v in iter_values(size_in))
 
         # validate size_t
         assert is_mapping(size_out)
         assert is_unique(size_out)
-
-        invalid_out = dict((k, v) for k, v in size_out.items() if not (v > 0))
-        if invalid_out:
-            raise Exception(invalid_out)
+        assert all(v > 0 for v in iter_values(size_out))
 
         # validate var
         assert is_mapping(data)
@@ -119,8 +115,13 @@ def transform(
     if vtype == VT_NumericExt:
         data = dict((f, v / size_in[f]) for f, v in data.items())
 
-    # filter unused in weight_map:
+    # filter unused in weight_map: input:
     weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
+
+    # filter unused in weight_map: output
+    weight_map = dict(
+        ((f, t), w) for (f, t), w in weight_map.items() if size_out.get(t, 0) > 0
+    )
 
     # init groups
     groups = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))

@@ -52,6 +52,8 @@ def as_list_of_series(
         items = [items]
     # make sure we have series:
     items = [it if isinstance(it, Series) else Series(1, index=it) for it in items]
+    for it in items:
+        valdidate_index(it)
     return items
 
 
@@ -175,20 +177,28 @@ def create_weight_map(
     return ds_weight_map
 
 
+def valdidate_index(item: Union[Index, Series, DataFrame]):
+    if isinstance(item, (Series, DataFrame)):
+        item = item.index
+
+    assert len(set(item.names)) == len(item.names)
+    assert item.is_unique
+
+
 def transform_pandas(
     vtype: VT,
     data: Union[DataFrame, Series, float],
     weights: Union[Index, Series, Tuple[Union[Index, Series]]],
     dim_in: Union[Index, Series] = None,
     dim_out: Union[Index, Series] = None,
-    threshold: float = 0.0,
-    validate: bool = True,
 ) -> Union[DataFrame, Series, float]:
     # ensure data is DataFrame with MultiIndex
     df_data = harmonize_input_data(data)
+    valdidate_index(df_data)
 
     # combine weights into single Series with MultiIndex
     ds_weights = combine_weights(weights)
+    valdidate_index(ds_weights)
 
     # determine input index
     if dim_in is None:
@@ -212,10 +222,48 @@ def transform_pandas(
         ds_size_out = ensure_multiindex(dim_out)
         idx_out = ds_size_out.index
 
+    valdidate_index(idx_in)
+    valdidate_index(idx_out)
+
     # create weight map
     ds_weight_map = create_weight_map(ds_weights, idx_in, idx_out)
 
-    #
+    valdidate_index(ds_weight_map)
+
+    if ds_size_in is None:
+        ds_size_in = ds_weight_map.reset_index().groupby(COL_FROM).sum(COL_VAL)[COL_VAL]
+        # fix index
+        ds_size_in.index = MultiIndex.from_tuples(
+            ds_size_in.index.values, names=idx_in.names
+        )
+        ds_size_in = ds_size_in.loc[ds_size_in > 0]
+
+    if ds_size_out is None:
+        ds_size_out = ds_weight_map.reset_index().groupby(COL_TO).sum(COL_VAL)[COL_VAL]
+        # fix index
+        ds_size_out.index = MultiIndex.from_tuples(
+            ds_size_out.index.values, names=idx_out.names
+        )
+        ds_size_out = ds_size_out.loc[ds_size_out > 0]
+
+    valdidate_index(ds_size_in)
+    valdidate_index(ds_size_out)
+
+    assert ds_size_in.index.isin(idx_in).all()
+    assert ds_size_out.index.isin(idx_out).all()
+
+    # TODO drop from ds_weight_map
+    # TODO: drop from data
+
+    # df_data = df_data[idx_in]
+
+    # raise Exception(idx_in[idx_in.isin(ds_size_in.index)])
+
+    # assert ds_size_in.index.equals(idx_in), (ds_size_in.index, idx_in)
+    # assert ds_size_out.index.equals(idx_out), (ds_size_out.index, idx_out)
+
+    idx_in = ds_size_in.index
+    idx_out = ds_size_out.index
 
     # apply base function
     df_result = DataFrame(index=idx_out)
@@ -229,8 +277,8 @@ def transform_pandas(
             weight_map=ds_weight_map,
             size_in=ds_size_in,
             size_out=ds_size_out,
-            threshold=threshold,
-            validate=validate,
+            threshold=0.0,
+            validate=False,  # we do validation in pandas
         )
 
         s_res_col = Series(res_col, name=s_col.name)
@@ -241,6 +289,6 @@ def transform_pandas(
         input_is_df=isinstance(data, DataFrame),
         output_is_scalar=idx_out.equals(IDX_SCALAR),
         output_multiindex=(
-            True if dim_out is None else isinstance(dim_out.index, MultiIndex)
+            True if dim_out is None else isinstance(idx_out, MultiIndex)
         ),
     )

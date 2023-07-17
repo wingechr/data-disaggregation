@@ -349,27 +349,26 @@ class TextExtPandas(TestCase):
         self.assertIsNone(method(left, right))
 
     def test_remap_series_to_frame_1(self):
-        df_res = DataFrame(
+        df_exp_res = DataFrame(
             {"i1": [11, 12], "i2": [21, 22], "i3": [31, 32], "v": [10, np.nan]}
         )
-        self.assertPandasEqal(
-            df_res,
-            remap_series_to_frame(
-                Series(
-                    [1, 10],
-                    index=MultiIndex.from_tuples(
-                        [(31, 22), (31, 21)], names=["i3", "i2"]
-                    ),
-                ),
-                MultiIndex.from_tuples(
-                    [
-                        (11, 21, 31),  # will match 10
-                        (12, 22, 32),  # will match nothing => nan
-                    ],
-                    names=["i1", "i2", "i3"],
-                ),
-                "v",
+        df_res = remap_series_to_frame(
+            Series(
+                [1, 10],
+                index=MultiIndex.from_tuples([(31, 22), (31, 21)], names=["i3", "i2"]),
             ),
+            MultiIndex.from_tuples(
+                [
+                    (11, 21, 31),  # will match 10
+                    (12, 22, 32),  # will match nothing => nan
+                ],
+                names=["i1", "i2", "i3"],
+            ),
+            "v",
+        )
+        self.assertPandasEqal(
+            df_exp_res,
+            df_res,
         )
 
     def test_merge_indices(self):
@@ -484,16 +483,17 @@ class TextExtPandas(TestCase):
             index=MultiIndex.from_tuples([("a",), ("b",), ("c",)], names=["i2"]),
             name="s1",
         )
-        self.assertPandasEqal(
-            exp_res,
-            transform_pandas(
-                vtype=VT_NumericExt,
-                data=Series([1, 2], index=Index([0, 1], name="i1"), name="s1"),
-                weights=Series(
-                    [1, 2, 1.5],
-                    index=MultiIndex.from_tuples(
-                        [(0, "a"), (0, "b"), (1, "c")], names=["i1", "i2"]
-                    ),
+        res = transform_pandas(
+            vtype=VT_NumericExt,
+            data=Series([1, 2], index=Index([0, 1], name="i1"), name="s1"),
+            weights=Series(
+                [1, 2, 1.5],
+                index=MultiIndex.from_tuples(
+                    [(0, "a"), (0, "b"), (1, "c")], names=["i1", "i2"]
                 ),
             ),
+        )
+        self.assertPandasEqal(
+            exp_res,
+            res,
         )

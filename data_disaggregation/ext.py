@@ -215,12 +215,15 @@ def transform_pandas(
     # create weight map
     ds_weight_map = create_weight_map(ds_weights, idx_in, idx_out)
 
+    #
+
     # apply base function
     df_result = DataFrame(index=idx_out)
     for name in df_data.columns:
         s_col = df_data[name]
+        s_col = s_col.dropna()
 
-        df_result[s_col.name] = transform(
+        res_col = transform(
             vtype=vtype,
             data=s_col,
             weight_map=ds_weight_map,
@@ -229,6 +232,9 @@ def transform_pandas(
             threshold=threshold,
             validate=validate,
         )
+
+        s_res_col = Series(res_col, name=s_col.name)
+        df_result[s_col.name] = s_res_col
 
     return format_result(
         df_result,

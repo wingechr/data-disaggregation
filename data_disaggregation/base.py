@@ -89,8 +89,10 @@ def transform(
         # validate size_t
         assert is_mapping(size_out)
         assert is_unique(size_out)
-        assert all(v > 0 for v in iter_values(size_out))
-        # assert all(isinstance(v, (float, int)) for v in iter_values(size_out))
+
+        invalid_out = dict((k, v) for k, v in size_out.items() if not (v > 0))
+        if invalid_out:
+            raise Exception(invalid_out)
 
         # validate var
         assert is_mapping(data)

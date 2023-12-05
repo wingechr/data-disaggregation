@@ -9,14 +9,18 @@ from . import classes
 
 
 def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
-    """simple group sum
+    """simple group sum.
 
-    Args:
-        key_vals (list): non empty list of (key, value) pairs
-          * keys can be anything hashable,
-          * values must be numerical
+    Parameters
+    ----------
+    key_vals: Mapping
+        * keys can be anything hashable,
+        * values must be numerical
+    get_key: Callable = None
 
     Returns
+    -------
+    : Mapping
         list of (unique key, sum of values) pairs
     """
 
@@ -34,15 +38,19 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
 
 
 def weighted_sum(value_normweights: Tuple[float]) -> float:
-    """get sum product
+    """get sum product.
 
-    Args:
-        value_normweights (list): non empty list of (value, weight) pairs
-          * values must be numerical
-          * weights must be numerical, positive, and sum up to 1.0
+    Parameters
+    ----------
+    value_normweights : list
+        non empty list of (value, weight) pairs.
+        * values must be numerical.
+        * weights must be numerical, positive, and sum up to 1.0.
 
     Returns
-        key from original list with highest weight
+    -------
+    : float
+
     """
     # TODO faster methods with numpy or ?
     return sum(v * w for v, w in value_normweights)
@@ -51,13 +59,16 @@ def weighted_sum(value_normweights: Tuple[float]) -> float:
 def weighted_mode(value_normweights: Tuple):
     """get most common value (but by weight)
 
-    Args:
-        value_normweights (list): non empty list of (value, weight) pairs
-          * values can be anything sortable
-          * weights must be numerical, positive, and sum up to 1.0
+    Parameters
+    ----------
+    value_normweights : list
+        non empty list of (value, weight) pairs.
+        * values must be anything sortable.
+        * weights must be numerical, positive, and sum up to 1.0.
 
     Returns
-        key from original list with highest weight
+    -------
+    Any
     """
     # make values unique (sum weights)
     value_normweights = group_sum(value_normweights).items()
@@ -68,13 +79,16 @@ def weighted_mode(value_normweights: Tuple):
 def weighted_percentile(value_normweights: Tuple, p=0.5):
     """get most median (but by weight)
 
-    Args:
-        value_normweights (list): non empty list of (value, weight) pairs
-          * values can be anything sortable
-          * weights must be numerical, positive, and sum up to 1.0
+    Parameters
+    ----------
+    value_normweights : list
+        non empty list of (value, weight) pairs.
+        * values must be anything sortable.
+        * weights must be numerical, positive, and sum up to 1.0.
 
     Returns
-        key from original list with highest weight
+    -------
+    Any
     """
     # make values unique (sum weights)
     value_normweights = group_sum(value_normweights).items()
@@ -90,13 +104,16 @@ def weighted_percentile(value_normweights: Tuple, p=0.5):
 def weighted_median(value_normweights: Tuple):
     """get most median (but by weight)
 
-    Args:
-        value_normweights (list): non empty list of (value, weight) pairs
-          * values can be anything sortable
-          * weights must be numerical, positive, and sum up to 1.0
+    Parameters
+    ----------
+    value_normweights : list
+        non empty list of (value, weight) pairs.
+        * values must be anything sortable.
+        * weights must be numerical, positive, and sum up to 1.0.
 
     Returns
-        key from original list with highest weight
+    -------
+    Any
     """
     return weighted_percentile(value_normweights, p=0.5)
 

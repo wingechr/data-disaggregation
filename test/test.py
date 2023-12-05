@@ -124,8 +124,6 @@ class TestUtils(TestCase):
 
 
 class TestBase(TestCase):
-    """"""
-
     def get_example(self, vtype):
         """
         M | D  E  F | S | V
@@ -255,7 +253,7 @@ class TestBaseExamples(TestCase):
                 (2, SCALAR_INDEX_KEY): 20,
                 (3, SCALAR_INDEX_KEY): 30,
             },
-            threshold=0.5,
+            weight_rel_threshold=0.5,
         )
         self.assertAlmostEqual(res[SCALAR_INDEX_KEY], 1 + 1 + 10)
 
@@ -285,9 +283,9 @@ class TestBaseExamples(TestCase):
                 (SCALAR_INDEX_KEY, "11"): 0.99,  # cell will be dropped (size = 2)
                 (SCALAR_INDEX_KEY, "10"): 1.1,  # (size = 2)
             },
-            size_in={SCALAR_INDEX_KEY: 5},
-            size_out={"00": 1, "01": 1, "11": 2, "10": 2},
-            threshold=0.5,
+            weights_from={SCALAR_INDEX_KEY: 5},
+            weights_to={"00": 1, "01": 1, "11": 2, "10": 2},
+            weight_rel_threshold=0.5,
         )
 
         self.assertAlmostEqual(res["00"], 100 / 5)

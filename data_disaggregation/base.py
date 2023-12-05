@@ -48,7 +48,7 @@ Helper to create the mapping
 
 from typing import Mapping, Tuple
 
-from .classes import VT, F, T, V, VT_NumericExt
+from .classes import F, T, V, VariableType, VT_NumericExt
 from .utils import (
     as_set,
     group_idx_first,
@@ -65,37 +65,68 @@ VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
 def transform(
-    vtype: VT,
+    vtype: VariableType,
     data: Mapping[F, V],
     weight_map: Mapping[Tuple[F, T], float],
-    size_in: Mapping[F, float] = None,
-    size_out: Mapping[T, float] = None,
-    threshold: float = 0.0,
-    validate=True,
+    weights_from: Mapping[F, float] = None,
+    weights_to: Mapping[T, float] = None,
+    weight_rel_threshold: float = 0.0,
+    validate: bool = True,
 ) -> Mapping[T, V]:
-    if size_in is None:
-        size_in = group_idx_first(weight_map)
+    """(dis-)aggregate data.
 
-    if size_out is None:
-        size_out = group_idx_second(weight_map)
+    Parameters
+    ----------
+    vtype: VariableType
+        Variable type of input data, determines the aggregation method.
+    data: Mapping[F, V]
+        Input data: mapping (usually dict) from any keys (any hashable) to values.
+    weight_map: Mapping[Tuple[F, T], float]
+        weights for combinations of input and output elements (must be positive).
+        Keys must tuples from input/output key pairs.
+    weights_from: Mapping[F, float]
+        optional weights of input elements (must be positive).
+        If not specified, this will be calculated as a sum from `weight_map`.
+    weights_to: Mapping[T, float]
+        optional weights of output elements (must be positive).
+        If not specified, this will be calculated as a sum from `weight_map`.
+    weight_rel_threshold: float
+        optional value between 0 and 1: all mappings are dropped
+        if the sum of input weights / output weight is smaller than this threshold.
+        For example, you may want to set it to 0.5 for geographical mappings with
+        extensive data.
+    validate bool:
+        if True: run additional (but costly) validations of weights and data.
+
+    Returns
+    -------
+    : Mapping[T, V]
+        output data as a mapping from output keys (any hashable) to values.
+
+    """
+    if weights_from is None:
+        weights_from = group_idx_first(weight_map)
+
+    if weights_to is None:
+        weights_to = group_idx_second(weight_map)
 
     if validate:
         # validate size_f
-        assert is_mapping(size_in)
-        assert is_unique(size_in)
-        assert all(v > 0 for v in iter_values(size_in))
+        assert is_mapping(weights_from)
+        assert is_unique(weights_from)
+        assert all(v > 0 for v in iter_values(weights_from))
 
         # validate size_t
-        assert is_mapping(size_out)
-        assert is_unique(size_out)
-        assert all(v > 0 for v in iter_values(size_out))
+        assert is_mapping(weights_to)
+        assert is_unique(weights_to)
+        assert all(v > 0 for v in iter_values(weights_to))
 
         # validate var
         assert is_mapping(data)
         assert is_unique(data)
 
-        if not is_subset(data, size_in):
-            err = as_set(data) - as_set(size_in)
+        if not is_subset(data, weights_from):
+            err = as_set(data) - as_set(weights_from)
             raise Exception(
                 f"Variable index is not a subset of input dimension subset: {err}"
             )
@@ -104,8 +135,8 @@ def transform(
         assert is_map(weight_map)
         assert is_unique(weight_map)
         assert all(v >= 0 for v in iter_values(weight_map))
-        assert is_subset([x[0] for x in weight_map.keys()], size_in)
-        assert is_subset([x[1] for x in weight_map.keys()], size_out)
+        assert is_subset([x[0] for x in weight_map.keys()], weights_from)
+        assert is_subset([x[1] for x in weight_map.keys()], weights_to)
         # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
     # filter nan in data
@@ -113,19 +144,19 @@ def transform(
 
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
-        data = dict((f, v / size_in[f]) for f, v in data.items())
+        data = dict((f, v / weights_from[f]) for f, v in data.items())
 
     # filter unused in weight_map: input:
     weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
 
     # filter unused in weight_map: output
     weight_map = dict(
-        ((f, t), w) for (f, t), w in weight_map.items() if size_out.get(t, 0) > 0
+        ((f, t), w) for (f, t), w in weight_map.items() if weights_to.get(t, 0) > 0
     )
 
     # init groups
     groups = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
-    # group data
+    # group data by output keys
     for (f, t), w in weight_map.items():
         v = data[f]
         groups[t].append((v, w))
@@ -133,18 +164,12 @@ def transform(
     # create weight sums
     group_sumw = dict((t, sum(w for _, w in vws)) for t, vws in groups.items())
 
-    if validate or threshold:
-        sumw_rel = dict((t, sumw / size_out[t]) for t, sumw in group_sumw.items())
-
-    # sumw always <= size_out ==> sumw_rel <= 1
-    # TODO: maybe drop this check, this should never really happen
-    # if validate:
-    #    scomp = 1 + VALIDATE_EQ_REL_TOLERANCE
-    #    assert all(s <= scomp for s in sumw_rel.values()), sumw_rel
-
     # drop groups under threshold
-    if threshold:
-        groups = dict((t, vws) for t, vws in groups.items() if sumw_rel[t] >= threshold)
+    if weight_rel_threshold:
+        sumw_rel = dict((t, sumw / weights_to[t]) for t, sumw in group_sumw.items())
+        groups = dict(
+            (t, vws) for t, vws in groups.items() if sumw_rel[t] >= weight_rel_threshold
+        )
 
     result = {}
     for t, vws in groups.items():
@@ -156,6 +181,6 @@ def transform(
     #  re-scale intensive => extensive
     if vtype == VT_NumericExt:
         for t, v in result.items():
-            result[t] = v * size_out[t]
+            result[t] = v * weights_to[t]
 
     return result

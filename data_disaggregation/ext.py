@@ -6,7 +6,7 @@ import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
-from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VT
+from .classes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VariableType
 from .utils import is_scalar
 
 IDX_SCALAR = MultiIndex.from_product([Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)])
@@ -186,7 +186,7 @@ def valdidate_index(item: Union[Index, Series, DataFrame]):
 
 
 def transform_pandas(
-    vtype: VT,
+    vtype: VariableType,
     data: Union[DataFrame, Series, float],
     weights: Union[Index, Series, Tuple[Union[Index, Series]]],
     dim_in: Union[Index, Series] = None,
@@ -275,9 +275,9 @@ def transform_pandas(
             vtype=vtype,
             data=s_col,
             weight_map=ds_weight_map,
-            size_in=ds_size_in,
-            size_out=ds_size_out,
-            threshold=0.0,
+            weights_from=ds_size_in,
+            weights_to=ds_size_out,
+            weight_rel_threshold=0.0,
             validate=False,  # we do validation in pandas
         )
 

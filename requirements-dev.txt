@@ -1,10 +1,9 @@
 pandas
 
 tox
-black
-flake8
 pre-commit
 mkdocs
 mkdocs-material
 mkdocs-jupyter
+mkdocstrings[python]
 jupyter

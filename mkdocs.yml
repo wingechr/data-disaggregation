@@ -30,5 +30,11 @@ markdown_extensions:
 plugins:
   - mkdocs-jupyter:
       execute: false
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            docstring_style: numpy
   - search:
       lang: en

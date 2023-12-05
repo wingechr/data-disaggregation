@@ -15,23 +15,29 @@ SCALAR_DIM_NAME = ""
 SCALAR_INDEX_KEY = ""
 
 
-class VT(ABC):
+class VariableType(ABC):
     @classmethod
     def weighted_aggregate(cls, data):
-        """aggregation
+        """aggregate data
 
-        Args:
-            data (list): non empty list of (value, weight) pairs
+        Parameters
+        ----------
+        data : Iterable
+            non empty list of (value, weight) pairs.
+            weights must be numerical, positive, and sum up to 1.0.
 
         Returns
-            aggregated value
+        -------
+        aggregated value
         """
         raise NotImplementedError()
 
 
-class VT_Nominal(VT):
-    """
-    Examples: Regional Codes
+class VT_Nominal(VariableType):
+    """Type class for nominal (categorical) data.
+
+    - Aggregation method: mode (most commonly used)
+    - Examples: regional codes
     """
 
     @classmethod
@@ -40,13 +46,10 @@ class VT_Nominal(VT):
 
 
 class VT_Ordinal(VT_Nominal):
-    """
-    Values can be sorted in a meaningful way
-    Usually, that means using numerical codes that
-    do not represent a metric distance, liek a likert scale
+    """Type class for ordinal data (ranked categorical).
 
-    Examples: [1 = "a little", 2 = "somewhat", 3 = "a lot"]
-
+    - Aggregation method: median
+    - Examples: Level of agreement
     """
 
     @classmethod
@@ -54,10 +57,13 @@ class VT_Ordinal(VT_Nominal):
         return utils.weighted_median(data)
 
 
-class VT_Numeric(VT):
-    """
-    * Values can be calculated by linear combinations
-    * Examples: height, temperature, density
+class VT_Numeric(VariableType):
+    """Type class for numerical, intensive data.
+
+    An intensive variable is one which not NOT depend on system size.
+
+    - Aggregation method: weighted average
+    - Examples: temperature, density, pressure
     """
 
     @classmethod
@@ -66,11 +72,12 @@ class VT_Numeric(VT):
 
 
 class VT_NumericExt(VT_Numeric):
-    """
-    Values are extensive, i.e. they are can be transformed into intensive
-    by dividing by domain size
+    """Type class for numerical, extensive data.
 
-    * Examples: population, energy production
+    An extensive variable is one which does not depend on system size.
+
+    - Aggregation method: weighted sum
+    - Examples: population
     """
 
     pass

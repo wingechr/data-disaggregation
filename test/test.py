@@ -17,7 +17,8 @@ from data_disaggregation.classes import (
 from data_disaggregation.ext import (
     COL_FROM,
     COL_TO,
-    COL_VAL,
+    COL_WEIGHT,
+    as_multiindex,
     combine_weights,
     create_weight_map,
     ensure_multiindex,
@@ -336,6 +337,13 @@ class TestBaseExamples(TestCase):
 class TextExtPandas(TestCase):
     def assertPandasEqal(self, left, right):
         if isinstance(left, Index):
+            left = left.sort_values()
+            right = right.sort_values()
+        else:
+            left = left.sort_index()
+            right = right.sort_index()
+
+        if isinstance(left, Index):
             method = pd.testing.assert_index_equal
         elif isinstance(left, Series):
             method = partial(pd.testing.assert_series_equal, check_dtype=False)
@@ -396,19 +404,18 @@ class TextExtPandas(TestCase):
 
     def test_combine_weights_1(self):
         # no overlap
-        s_res = Series(
-            [2, 3, 2, 3],
-            index=MultiIndex.from_tuples(
-                [(11, 21), (11, 22), (12, 21), (12, 22)], names=["i1", "i2"]
-            ),
-        )
         self.assertPandasEqal(
-            s_res,
             combine_weights(
                 [
                     Index([11, 12], name="i1"),
                     Series([2, 3], index=Index([21, 22], name="i2")),
                 ]
+            ),
+            Series(
+                [2, 3, 2, 3],
+                index=MultiIndex.from_tuples(
+                    [(11, 21), (11, 22), (12, 21), (12, 22)], names=["i1", "i2"]
+                ),
             ),
         )
 
@@ -457,7 +464,7 @@ class TextExtPandas(TestCase):
                 ],
                 names=[COL_FROM, COL_TO],
             ),
-            name=COL_VAL,
+            name=COL_WEIGHT,
         )
 
         self.assertPandasEqal(ds_result, create_weight_map(ds_weights, idx_in, idx_out))
@@ -475,23 +482,38 @@ class TextExtPandas(TestCase):
             ensure_multiindex(DataFrame({"v": [1, 1]}, index=Index([1, 1], name="i1"))),
         )
 
-    def test_transform_pandas_1(self):
-        exp_res = Series(
-            [1 / (2 + 1), 2 / (2 + 1), 2.0],
-            index=MultiIndex.from_tuples([("a",), ("b",), ("c",)], names=["i2"]),
-            name="s1",
-        )
-        res = transform_pandas(
-            vtype=VT_NumericExt,
-            data=Series([1, 2], index=Index([0, 1], name="i1"), name="s1"),
-            weights=Series(
-                [1, 2, 1.5],
-                index=MultiIndex.from_tuples(
-                    [(0, "a"), (0, "b"), (1, "c")], names=["i1", "i2"]
+    def test_pandas_utils(self):
+        for idx in [Index(["b", "a"], name="d1")]:
+            idx2 = as_multiindex(idx)
+            self.assertEqual(idx.names, idx2.names)
+            self.assertEqual(tuple(tuple(x) for x in idx.values), tuple(idx2.values))
+
+    def test_transform_pandas(self):
+        self.assertPandasEqal(
+            transform_pandas(
+                vtype=VT_NumericExt,
+                data=Series([1, 2], index=Index([0, 1], name="i1"), name="s1"),
+                weights=Series(
+                    [1, 2, 1.5],
+                    index=MultiIndex.from_tuples(
+                        [(0, "a"), (0, "b"), (1, "c")], names=["i1", "i2"]
+                    ),
                 ),
             ),
+            Series(
+                [1 / (2 + 1), 2 / (2 + 1), 2.0],
+                index=MultiIndex.from_tuples([("a",), ("b",), ("c",)], names=["i2"]),
+                name="s1",
+            ),
         )
+
+    def test_transform_pandas2(self):
         self.assertPandasEqal(
-            exp_res,
-            res,
+            transform_pandas(
+                vtype=VT_NumericExt, data=10, weights=Index(["a", "b"], name="d1")
+            ),
+            Series(
+                [0.5, 0.5],
+                index=as_multiindex(Index(["a", "b"], name="d1")),
+            ),
         )

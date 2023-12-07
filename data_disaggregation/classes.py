@@ -10,9 +10,9 @@ F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
 
-SCALAR_DIM_NAME = ""
+SCALAR_DIM_NAME = "__SCALAR__"
 # TODO: using None in pandas causes problems with autoconvert to nan
-SCALAR_INDEX_KEY = ""
+SCALAR_INDEX_KEY = "__SCALAR__"
 
 
 class VariableType(ABC):
@@ -60,7 +60,7 @@ class VT_Ordinal(VT_Nominal):
 class VT_Numeric(VariableType):
     """Type class for numerical, intensive data.
 
-    An intensive variable is one which not NOT depend on system size.
+    An intensive variable is one which does not scale with the system size.
 
     - Aggregation method: weighted average
     - Examples: temperature, density, pressure
@@ -74,10 +74,11 @@ class VT_Numeric(VariableType):
 class VT_NumericExt(VT_Numeric):
     """Type class for numerical, extensive data.
 
-    An extensive variable is one which does not depend on system size.
+    An extensive variable is one which does scale with the system size
+    (assuming an equal distribution).
 
     - Aggregation method: weighted sum
-    - Examples: population
+    - Examples: population, energy, total cost
     """
 
     pass

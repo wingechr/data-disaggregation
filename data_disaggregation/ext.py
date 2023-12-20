@@ -109,7 +109,7 @@ def format_result(df, input_is_df, output_is_scalar, output_multiindex):
             # return series instead of Frame
             return df.iloc[0, :]
         else:
-            return df.iloca[:, :]
+            return df.iloc[:, :]
     else:
         if output_is_scalar:
             # return scalar

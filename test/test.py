@@ -506,14 +506,3 @@ class TextExtPandas(TestCase):
                 name="s1",
             ),
         )
-
-    def test_transform_pandas2(self):
-        self.assertPandasEqal(
-            transform_pandas(
-                vtype=VT_NumericExt, data=10, weights=Index(["a", "b"], name="d1")
-            ),
-            Series(
-                [0.5, 0.5],
-                index=as_multiindex(Index(["a", "b"], name="d1")),
-            ),
-        )

@@ -7,13 +7,6 @@ import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation.base import transform
-from data_disaggregation.classes import (
-    SCALAR_INDEX_KEY,
-    VT_Nominal,
-    VT_Numeric,
-    VT_NumericExt,
-    VT_Ordinal,
-)
 from data_disaggregation.ext import (
     COL_FROM,
     COL_TO,
@@ -25,6 +18,13 @@ from data_disaggregation.ext import (
     merge_indices,
     remap_series_to_frame,
     transform_pandas,
+)
+from data_disaggregation.types import (
+    SCALAR_INDEX_KEY,
+    VT_Nominal,
+    VT_Numeric,
+    VT_NumericExt,
+    VT_Ordinal,
 )
 from data_disaggregation.utils import (
     as_mapping,

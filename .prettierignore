@@ -1,0 +1,3 @@
+# this file contains non standard yaml sections for options
+# that must not be corrected by prettier
+docs/api.md

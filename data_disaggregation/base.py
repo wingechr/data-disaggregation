@@ -48,7 +48,7 @@ Helper to create the mapping
 
 from typing import Mapping, Tuple
 
-from .classes import F, T, V, VariableType, VT_NumericExt
+from .types import F, T, V, VT_NumericExt, _AbstractVariableType
 from .utils import (
     as_set,
     group_idx_first,
@@ -65,7 +65,7 @@ VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
 def transform(
-    vtype: VariableType,
+    vtype: _AbstractVariableType,
     data: Mapping[F, V],
     weight_map: Mapping[Tuple[F, T], float],
     weights_from: Mapping[F, float] = None,

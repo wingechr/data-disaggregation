@@ -35,6 +35,8 @@ plugins:
         python:
           options:
             show_source: false
+            show_root_heading: true
+            show_root_full_path: true
             docstring_style: numpy
   - search:
       lang: en

@@ -1,4 +1,4 @@
-"""classes and types
+"""Type classes for data.
 """
 
 from abc import ABC
@@ -15,7 +15,7 @@ SCALAR_DIM_NAME = "__SCALAR__"
 SCALAR_INDEX_KEY = "__SCALAR__"
 
 
-class VariableType(ABC):
+class _AbstractVariableType(ABC):
     @classmethod
     def weighted_aggregate(cls, data):
         """aggregate data
@@ -33,7 +33,7 @@ class VariableType(ABC):
         raise NotImplementedError()
 
 
-class VT_Nominal(VariableType):
+class VT_Nominal(_AbstractVariableType):
     """Type class for nominal (categorical) data.
 
     - Aggregation method: mode (most commonly used)
@@ -57,7 +57,7 @@ class VT_Ordinal(VT_Nominal):
         return utils.weighted_median(data)
 
 
-class VT_Numeric(VariableType):
+class VT_Numeric(_AbstractVariableType):
     """Type class for numerical, intensive data.
 
     An intensive variable is one which does not scale with the system size.

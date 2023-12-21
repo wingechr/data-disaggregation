@@ -3,7 +3,11 @@
 ## Test
 
 ```bash
+# quick test
 python -m unittest
+
+# full test
+tox
 ```
 
 ## Documentation

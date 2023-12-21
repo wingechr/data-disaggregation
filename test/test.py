@@ -3,8 +3,10 @@ import logging
 from functools import partial
 from unittest import TestCase
 
+import nbformat
 import numpy as np
 import pandas as pd
+from nbconvert.preprocessors import ExecutePreprocessor
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation import ext
@@ -517,3 +519,14 @@ class Doctests(TestCase):
 
     def test_modules(self):
         self.run_doctest(ext)
+
+
+class Notebooks(TestCase):
+    def run_notebook(self, notebook_path: str):
+        with open(notebook_path, "rb") as file:
+            nb = nbformat.read(file, nbformat.NO_CONVERT)
+        ep = ExecutePreprocessor(timeout=600, kernel_name="python3")
+        ep.preprocess(nb)  # will raise Exception
+
+    def test_notebooks(self):
+        self.run_notebook("./docs/examples.ipynb")

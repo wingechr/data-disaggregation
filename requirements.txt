@@ -8,6 +8,7 @@ mkdocs
 mkdocs-material
 mkdocs-jupyter
 mkdocstrings[python]
+pymdown-extensions
 jupyter
 
 # build/deploy: for auto deploy on github

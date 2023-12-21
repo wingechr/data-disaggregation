@@ -20,6 +20,8 @@ theme:
 
 # Extensions
 markdown_extensions:
+  # to include README as a snippet
+  - pymdownx.snippets
   #- admonition
   #- attr_list
   #- def_list

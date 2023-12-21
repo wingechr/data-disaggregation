@@ -1,3 +1,4 @@
+import doctest
 import logging
 from functools import partial
 from unittest import TestCase
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Index, MultiIndex, Series
 
+from data_disaggregation import ext
 from data_disaggregation.base import transform
 from data_disaggregation.ext import (
     COL_FROM,
@@ -19,13 +21,6 @@ from data_disaggregation.ext import (
     remap_series_to_frame,
     transform_pandas,
 )
-from data_disaggregation.types import (
-    SCALAR_INDEX_KEY,
-    VT_Nominal,
-    VT_Numeric,
-    VT_NumericExt,
-    VT_Ordinal,
-)
 from data_disaggregation.utils import (
     as_mapping,
     group_idx_first,
@@ -37,6 +32,13 @@ from data_disaggregation.utils import (
     weighted_median,
     weighted_mode,
     weighted_sum,
+)
+from data_disaggregation.vtypes import (
+    SCALAR_INDEX_KEY,
+    VT_Nominal,
+    VT_Numeric,
+    VT_NumericExt,
+    VT_Ordinal,
 )
 
 logging.basicConfig(
@@ -506,3 +508,12 @@ class TextExtPandas(TestCase):
                 name="s1",
             ),
         )
+
+
+class Doctests(TestCase):
+    def run_doctest(self, module):
+        report = doctest.testmod(module)
+        self.assertFalse(report.failed)
+
+    def test_modules(self):
+        self.run_doctest(ext)

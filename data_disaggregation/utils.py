@@ -5,7 +5,7 @@ from typing import Callable, List, Mapping, Tuple
 
 from pandas import DataFrame, Index, Series
 
-from . import types
+from . import vtypes
 
 
 def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
@@ -177,7 +177,7 @@ def as_mapping(x, default_val=1) -> Mapping:
     elif is_list(x):
         return dict((k, default_val) for k in x)
     elif is_scalar(x):
-        return {types.SCALAR_INDEX_KEY: x}
+        return {vtypes.SCALAR_INDEX_KEY: x}
     raise TypeError(x)
 
 
@@ -185,8 +185,8 @@ def as_scalar(x):
     if as_scalar(x):
         return x
     elif is_mapping(x):
-        assert set(x.keys()) == set([types.SCALAR_INDEX_KEY])
-        return x[types.SCALAR_INDEX_KEY]
+        assert set(x.keys()) == set([vtypes.SCALAR_INDEX_KEY])
+        return x[vtypes.SCALAR_INDEX_KEY]
     raise TypeError(x)
 
 

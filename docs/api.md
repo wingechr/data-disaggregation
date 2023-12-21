@@ -1,6 +1,6 @@
 # API
 
-::: data_disaggregation.types
+::: data_disaggregation.vtypes
 
 ::: data_disaggregation.actions
     options:

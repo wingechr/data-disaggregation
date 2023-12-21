@@ -48,7 +48,6 @@ Helper to create the mapping
 
 from typing import Mapping, Tuple
 
-from .types import F, T, V, VariableType, VT_NumericExt
 from .utils import (
     as_set,
     group_idx_first,
@@ -60,6 +59,7 @@ from .utils import (
     is_unique,
     iter_values,
 )
+from .vtypes import F, T, V, VariableType, VT_NumericExt
 
 VALIDATE_EQ_REL_TOLERANCE = 1e-10
 

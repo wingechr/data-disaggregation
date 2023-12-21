@@ -6,8 +6,8 @@ import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
-from .types import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VariableType
 from .utils import is_scalar
+from .vtypes import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VariableType
 
 IDX_SCALAR = MultiIndex.from_product([Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)])
 COL_WEIGHT = "__WEIGHT__"
@@ -217,6 +217,7 @@ def transform_pandas(
     -------
     Union[DataFrame, Series, float]
         output data
+
     """
 
     # ensure data is DataFrame with MultiIndex

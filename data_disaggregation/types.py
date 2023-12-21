@@ -15,7 +15,7 @@ SCALAR_DIM_NAME = "__SCALAR__"
 SCALAR_INDEX_KEY = "__SCALAR__"
 
 
-class _AbstractVariableType(ABC):
+class VariableType(ABC):
     @classmethod
     def weighted_aggregate(cls, data):
         """aggregate data
@@ -33,7 +33,7 @@ class _AbstractVariableType(ABC):
         raise NotImplementedError()
 
 
-class VT_Nominal(_AbstractVariableType):
+class VT_Nominal(VariableType):
     """Type class for nominal (categorical) data.
 
     - Aggregation method: mode (most commonly used)
@@ -57,7 +57,7 @@ class VT_Ordinal(VT_Nominal):
         return utils.weighted_median(data)
 
 
-class VT_Numeric(_AbstractVariableType):
+class VT_Numeric(VariableType):
     """Type class for numerical, intensive data.
 
     An intensive variable is one which does not scale with the system size.

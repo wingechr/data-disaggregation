@@ -6,7 +6,7 @@ import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
-from .types import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, _AbstractVariableType
+from .types import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, VariableType
 from .utils import is_scalar
 
 IDX_SCALAR = MultiIndex.from_product([Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)])
@@ -189,13 +189,36 @@ def validate_multiindex(item: Union[Index, Series, DataFrame]):
 
 
 def transform_pandas(
-    vtype: _AbstractVariableType,
+    vtype: VariableType,
     data: Union[DataFrame, Series, float],
     weights: Union[Index, Series, Tuple[Union[Index, Series]]],
     dim_in: Union[Index, Series] = None,
     dim_out: Union[Index, Series] = None,
     validate: bool = True,
 ) -> Union[DataFrame, Series, float]:
+    """(dis-)aggregate data (pandas).
+
+    Parameters
+    ----------
+    vtype : VariableType
+        Variable type of input data, determines the aggregation method.
+    data : Union[DataFrame, Series, float]
+        Input data. Indices must be unique and have unique level names
+    weights : Union[Index, Series, Tuple[Union[Index, Series]]]
+        weights for combinations of input and output elements (must be positive).
+    dim_in : Union[Index, Series], optional
+        TODO
+    dim_out : Union[Index, Series], optional
+        TODO
+    validate : bool, optional
+        if True: run additional (but costly) validations of weights and data.
+
+    Returns
+    -------
+    Union[DataFrame, Series, float]
+        output data
+    """
+
     # ensure data is DataFrame with MultiIndex
     df_data = harmonize_input_data(data)
 

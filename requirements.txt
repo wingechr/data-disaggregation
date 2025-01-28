@@ -1,17 +1,12 @@
+
+-r docs/requirements.txt
 .
 
 # build/deploy: for auto deploy on github
 build
 bumpversion
 jupyter
-mkdocs
-mkdocs-jupyter
-mkdocs-material
-mkdocstrings[python]
-nbformat
-pandas
 pre-commit
-pymdown-extensions
 
 # dev / test
 tox

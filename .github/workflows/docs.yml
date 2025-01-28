@@ -16,8 +16,7 @@ jobs:
           python-version: "3.x"
           cache: "pip" # caching pip dependencies
       - run: |
-          pushd docs
-          pip install -r requirements.txt
+          pip install -r docs/requirements.txt
           export JUPYTER_PLATFORM_DIRS=1
           jupyter --paths
           mkdocs gh-deploy --force

@@ -1,3 +1,4 @@
+.
 
 # build/deploy: for auto deploy on github
 build

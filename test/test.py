@@ -81,7 +81,6 @@ class TestUtils(TestCase):
             (float("inf"), True),
             (float("nan"), True),
             (np.nan, True),
-            (np.NAN, True),
         ]:
             self.assertEqual(is_na(x), y)
 

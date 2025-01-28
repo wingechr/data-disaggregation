@@ -1,5 +1,6 @@
 """utility functions
 """
+
 import math
 from typing import Callable, List, Mapping, Tuple
 

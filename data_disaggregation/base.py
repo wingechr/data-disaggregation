@@ -45,7 +45,6 @@ Helper to create the mapping
 
 """
 
-
 from typing import Mapping, Tuple
 
 from .utils import (

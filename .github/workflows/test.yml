@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   test:
@@ -23,10 +24,10 @@ jobs:
       - run: |
           conda config --system --set changeps1 False  # fixes conda: UnicodeEncodeError in windows
           conda install -q -y -c conda-forge tox
-          conda create -q -y -n py37 python=3.7
-          conda create -q -y -n py311 python=3.11
+          conda create -q -y -n py38 python=3.8
+          conda create -q -y -n py313 python=3.13
       - run: |
-          export PY37_PATH=$CONDA/envs/py37/bin
-          export PY311_PATH=$CONDA/envs/py311/bin
-          export PATH=$PATH:$PY37_PATH:$PY311_PATH
+          export PY38_PATH=$CONDA/envs/py38/bin
+          export PY313_PATH=$CONDA/envs/py313/bin
+          export PATH=$PATH:$PY38_PATH:$PY313_PATH
           tox # --parallel

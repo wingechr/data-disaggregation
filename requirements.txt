@@ -1,15 +1,16 @@
-pandas
-
-# dev
-tox
-bumpversion
-pre-commit
-mkdocs
-mkdocs-material
-mkdocs-jupyter
-mkdocstrings[python]
-pymdown-extensions
-jupyter
 
 # build/deploy: for auto deploy on github
 build
+bumpversion
+jupyter
+mkdocs
+mkdocs-jupyter
+mkdocs-material
+mkdocstrings[python]
+nbformat
+pandas
+pre-commit
+pymdown-extensions
+
+# dev / test
+tox

@@ -1,5 +1,6 @@
 """extended functions, especially for pandas Series
 """
+
 from typing import List, Tuple, Union
 
 import numpy as np

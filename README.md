@@ -11,11 +11,3 @@
 ```bash
 pip install data-disaggregation
 ```
-
-## Quickstart Examples
-
-```python
-import pandas as pd
-import data_disaggregation as dd
-
-```

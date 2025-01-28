@@ -20,4 +20,3 @@ jobs:
           export JUPYTER_PLATFORM_DIRS=1
           jupyter --paths
           mkdocs gh-deploy --force
-          popd

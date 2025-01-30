@@ -37,6 +37,7 @@ class VT_Nominal(VariableType):
     """Type class for nominal (categorical) data.
 
     - Aggregation method: mode (most commonly used)
+    - Disaggregation method: keep value
     - Examples: regional codes
     """
 
@@ -49,6 +50,7 @@ class VT_Ordinal(VT_Nominal):
     """Type class for ordinal data (ranked categorical).
 
     - Aggregation method: median
+    - Disaggregation method: keep value
     - Examples: Level of agreement
     """
 
@@ -58,11 +60,12 @@ class VT_Ordinal(VT_Nominal):
 
 
 class VT_Numeric(VariableType):
-    """Type class for numerical, intensive data.
+    """Type class for numerical, intensive data
 
     An intensive variable is one which does not scale with the system size.
 
     - Aggregation method: weighted average
+    - Disaggregation method: keep value
     - Examples: temperature, density, pressure
     """
 
@@ -77,7 +80,8 @@ class VT_NumericExt(VT_Numeric):
     An extensive variable is one which does scale with the system size
     (assuming an equal distribution).
 
-    - Aggregation method: weighted sum
+    - Aggregation method: sum
+    - Disaggregation method: distribute by weights
     - Examples: population, energy, total cost
     """
 

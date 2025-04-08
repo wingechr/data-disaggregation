@@ -9,7 +9,8 @@ theme:
 # Extensions
 markdown_extensions:
   # to include README as a snippet
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: !relative $config_dir
 
 plugins:
   - mkdocs-jupyter:

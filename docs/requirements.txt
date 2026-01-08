@@ -4,3 +4,4 @@ mkdocs-material
 mkdocstrings[python]
 nbformat
 pymdown-extensions
+tornado>=6.3.2 # https://app.snyk.io/vuln/SNYK-PYTHON-TORNADO-5537286

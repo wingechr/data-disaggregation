@@ -1,7 +1,6 @@
-mkdocs
-mkdocs-jupyter
-mkdocs-material
+mkdocs~=1.6
+mkdocs-jupyter~=0.25
+mkdocs-material~=9.7
 mkdocstrings[python]
 nbformat
-pymdown-extensions
-tornado>=6.3.2 # https://app.snyk.io/vuln/SNYK-PYTHON-TORNADO-5537286
+pymdown-extensions~=10.17

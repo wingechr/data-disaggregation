@@ -1,0 +1,46 @@
+
+line-length = 88
+exclude = ["**/migrations/*.py"]
+ignore = [
+  "B017", # assert-raises-exception
+  "D105", # Missing docstring in magic method
+  "D107", # undocumented-public-init
+  "D202", # blank-line-after-function
+  "D203", # incorrect-blank-line-before-class
+  "D211", # blank-line-before-class
+  "D213", # multi-line-summary-second-line
+  "D400", # First line should end with a period
+  "D401", # non-imperative-mood
+  "D403", # first-word-uncapitalized
+  "D415", # missing-terminal-punctuation
+  #"S101", # assert
+  "S113", # request-without-timeout
+  "S310", # suspicious-url-open-usage
+  "S603", # subprocess-without-shell-equals-true
+  #"S608", # hardcoded-sql-expression
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+
+[lint]
+select = [
+  "E",   # pycodestyle
+  "F",   # Pyflakes
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear: opinionated bug & design warnings
+  "SIM", # flake8-simplify
+  "I",   # isort: imports
+  "S",   # flake8-bandit: Security issues
+  "A",   # flake8-builtins
+  "C4",  # flake8-comprehensions
+  "D",   # pydocstyle
+]
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true

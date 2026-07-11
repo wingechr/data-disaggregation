@@ -45,7 +45,7 @@ def ensure_multiindex(item: SeriesFrame) -> SeriesFrame:
 
 
 def as_list_of_series_w_multiindex(
-    items: Index | Series | tuple[Index | Series],
+    items: Index | Series | list[Index | Series],
 ) -> list[Series]:
     # make sure we have a list/tuple
     list_items = [items] if not isinstance(items, (list, tuple)) else items
@@ -57,7 +57,9 @@ def as_list_of_series_w_multiindex(
     return list_items
 
 
-def merge_indices(items: list[Series] | list[Index]) -> MultiIndex:
+def merge_indices(
+    items: list[Series] | list[Index] | list[Index | Series],
+) -> MultiIndex:
     """Create product of unions of indices"""
     # ensure items are multiindices
     list_items = [it if isinstance(it, Index) else it.index for it in items]
@@ -72,7 +74,9 @@ def merge_indices(items: list[Series] | list[Index]) -> MultiIndex:
     return MultiIndex.from_product(list(indices.values()))
 
 
-def combine_weights(weights: Index | Series | tuple[Index | Series]) -> Series:
+def combine_weights(
+    weights: Index | Series | list[Index | Series],
+) -> Series:
     """multiply all weights series
 
     * join on overlapping columns (or all if none
@@ -194,7 +198,7 @@ def validate_multiindex(item: Index | Series | DataFrame):
 def transform_pandas(
     vtype: type[VariableType],
     data: DataFrame | Series | float,
-    weights: Index | Series | tuple[Index | Series],
+    weights: Index | Series | list[Index | Series],
     dim_in: Index | Series | None = None,
     dim_out: Index | Series | None = None,
     validate: bool = True,

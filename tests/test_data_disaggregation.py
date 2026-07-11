@@ -388,6 +388,7 @@ class TextExtPandas(TestCase):
                 Index([31, 32, 33], name="i3"),
             ]
         )
+
         self.assertPandasEqal(
             idx_res,
             merge_indices(

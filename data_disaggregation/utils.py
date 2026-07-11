@@ -1,15 +1,14 @@
-"""utility functions
-"""
+"""utility functions"""
 
+from collections.abc import Callable, Iterable, Mapping
 import math
-from typing import Callable, List, Mapping, Tuple
 
 from pandas import DataFrame, Index, Series
 
 from . import vtypes
 
 
-def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
+def group_sum(key_vals: Mapping, get_key: Callable | None = None) -> dict:
     """simple group sum.
 
     Parameters
@@ -17,12 +16,14 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     key_vals: Mapping
         * keys can be anything hashable,
         * values must be numerical
-    get_key: Callable = None
+    get_key: Callable
+        get key
 
     Returns
     -------
     : Mapping
         list of (unique key, sum of values) pairs
+
     """
 
     res = {}
@@ -38,7 +39,7 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     return res
 
 
-def weighted_sum(value_normweights: Tuple[float]) -> float:
+def weighted_sum(value_normweights: Iterable[tuple[float, float]]) -> float:
     """get sum product.
 
     Parameters
@@ -57,7 +58,7 @@ def weighted_sum(value_normweights: Tuple[float]) -> float:
     return sum(v * w for v, w in value_normweights)
 
 
-def weighted_mode(value_normweights: Tuple):
+def weighted_mode(value_normweights: Mapping):
     """get most common value (but by weight)
 
     Parameters
@@ -70,14 +71,15 @@ def weighted_mode(value_normweights: Tuple):
     Returns
     -------
     Any
+
     """
     # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights).items()
+    value_normweights_dict = group_sum(value_normweights).items()
     # first element of item with highest value
-    return sorted(value_normweights, key=lambda vw: vw[1], reverse=True)[0][0]
+    return sorted(value_normweights_dict, key=lambda vw: vw[1], reverse=True)[0][0]
 
 
-def weighted_percentile(value_normweights: Tuple, p=0.5):
+def weighted_percentile(value_normweights: Mapping, p=0.5):
     """get most median (but by weight)
 
     Parameters
@@ -86,23 +88,26 @@ def weighted_percentile(value_normweights: Tuple, p=0.5):
         non empty list of (value, weight) pairs.
         * values must be anything sortable.
         * weights must be numerical, positive, and sum up to 1.0.
+    p: float
+        threshold
 
     Returns
     -------
     Any
+
     """
     # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights).items()
+    value_normweights_dict = group_sum(value_normweights).items()
     # get cumulative values
     wsum = 0
-    for v, w in sorted(value_normweights, key=lambda vw: vw[0]):
+    for v, w in sorted(value_normweights_dict, key=lambda vw: vw[0]):
         wsum += w
         if wsum >= p:
             return v
     raise ValueError()
 
 
-def weighted_median(value_normweights: Tuple):
+def weighted_median(value_normweights: Mapping):
     """get most median (but by weight)
 
     Parameters
@@ -115,6 +120,7 @@ def weighted_median(value_normweights: Tuple):
     Returns
     -------
     Any
+
     """
     return weighted_percentile(value_normweights, p=0.5)
 
@@ -153,7 +159,7 @@ def is_subset(a, b):
 
 
 def iter_values(x):
-    for k in x.keys():
+    for k in x:
         yield x[k]
 
 
@@ -161,13 +167,13 @@ def as_set(x) -> set:
     return set(as_list(x))
 
 
-def as_list(x) -> List:
+def as_list(x) -> list:
     # meaning: is index
     if is_list(x):
         return x
     elif is_mapping(x):
         if isinstance(x, (DataFrame, Series)):
-            return x.index
+            return list(x.index)
         return list(x.keys())  # TODO maybe wrap in list
     raise TypeError(x)
 
@@ -176,7 +182,7 @@ def as_mapping(x, default_val=1) -> Mapping:
     if is_mapping(x):
         return x
     elif is_list(x):
-        return dict((k, default_val) for k in x)
+        return dict.fromkeys(x, default_val)
     elif is_scalar(x):
         return {vtypes.SCALAR_INDEX_KEY: x}
     raise TypeError(x)
@@ -186,11 +192,11 @@ def as_scalar(x):
     if as_scalar(x):
         return x
     elif is_mapping(x):
-        assert set(x.keys()) == set([vtypes.SCALAR_INDEX_KEY])
+        assert set(x.keys()) == {vtypes.SCALAR_INDEX_KEY}
         return x[vtypes.SCALAR_INDEX_KEY]
     raise TypeError(x)
 
 
-def is_map(map) -> bool:
+def is_map(mapping) -> bool:
     """TODO: this is slow"""
-    return is_mapping(map) and all(len(k) == 2 for k in map.keys())
+    return is_mapping(mapping) and all(len(k) == 2 for k in mapping)

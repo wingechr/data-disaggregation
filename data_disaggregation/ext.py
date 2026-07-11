@@ -1,7 +1,4 @@
-"""extended functions, especially for pandas Series
-"""
-
-from typing import List, Tuple, Union
+"""extended functions, especially for pandas Series"""
 
 import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
@@ -16,10 +13,8 @@ COL_FROM = "__FROM__"
 COL_TO = "__TO__"
 
 
-def harmonize_input_data(data: Union[DataFrame, Series, float]) -> DataFrame:
-    """
-    return DataFrame with MultiIndex
-    """
+def harmonize_input_data(data: DataFrame | Series | float) -> DataFrame:
+    """return DataFrame with MultiIndex"""
     if is_scalar(data):
         data = DataFrame({SCALAR_INDEX_KEY: data}, index=IDX_SCALAR)
     elif isinstance(data, Series):
@@ -35,7 +30,7 @@ def as_multiindex(index: Index) -> MultiIndex:
     return index
 
 
-def ensure_multiindex(item: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
+def ensure_multiindex(item: DataFrame | Series) -> DataFrame | Series:
     if not isinstance(item.index, MultiIndex):
         index = as_multiindex(item.index)
         item = item.copy()  # TODO: can we replace index without copy?
@@ -44,8 +39,8 @@ def ensure_multiindex(item: Union[DataFrame, Series]) -> Union[DataFrame, Series
 
 
 def as_list_of_series_w_multiindex(
-    items: Union[Index, Series, Tuple[Union[Index, Series]]]
-) -> List[Series]:
+    items: Index | Series | tuple[Index | Series],
+) -> list[Series]:
     # make sure we have a list/tuple
     if not isinstance(items, (list, tuple)):
         items = [items]
@@ -55,7 +50,7 @@ def as_list_of_series_w_multiindex(
     return items
 
 
-def merge_indices(items: List[Union[Series, Index]]) -> MultiIndex:
+def merge_indices(items: list[Series | Index]) -> MultiIndex:
     """Create product of unions of indices"""
     # ensure items are multiindices
     items = [it if isinstance(it, Index) else it.index for it in items]
@@ -70,15 +65,15 @@ def merge_indices(items: List[Union[Series, Index]]) -> MultiIndex:
     return MultiIndex.from_product(indices.values())
 
 
-def combine_weights(
-    weights: Union[Index, Series, Tuple[Union[Index, Series]]]
-) -> Series:
+def combine_weights(weights: Index | Series | tuple[Index | Series]) -> Series:
     """multiply all weights series
+
     * join on overlapping columns (or all if none
     * if index and not series: use value 1
 
     Returns:
         Series with MultiIndex
+
     """
     # make sure we have series:
     weights = as_list_of_series_w_multiindex(weights)
@@ -121,7 +116,7 @@ def format_result(df, input_is_df, output_is_scalar, output_multiindex):
 
 def get_idx_out(idx_in: MultiIndex, idx_weights: MultiIndex) -> MultiIndex:
     idx_all = merge_indices([idx_in, idx_weights])
-    idx_levels = dict(zip(idx_all.names, idx_all.levels))
+    idx_levels = dict(zip(idx_all.names, idx_all.levels, strict=False))
 
     idx_names_only_in = set(idx_in.names) - set(idx_weights.names)
     idx_names_only_weights = set(idx_weights.names) - set(idx_in.names)
@@ -158,8 +153,8 @@ def remap_series_to_frame(s: Series, idx: MultiIndex, colname: str) -> DataFrame
 def create_weight_map(
     ds_weights: Series, idx_in: MultiIndex, idx_out: MultiIndex
 ) -> Series:
-    """
-    Returns weight Series
+    """Returns weight Series
+
     Index is 2 dimensional (F, T), each part is a tuple from idx_in, idx_out
     for overlapping levels: left == right
 
@@ -167,8 +162,8 @@ def create_weight_map(
     idx_all = merge_indices([idx_in, idx_out])
     # expand index (TODO: check if weights are dropped??)
     df = remap_series_to_frame(ds_weights, idx_all, COL_WEIGHT)
-    df[COL_FROM] = list(zip(*[df[n] for n in idx_in.names]))
-    df[COL_TO] = list(zip(*[df[n] for n in idx_out.names]))
+    df[COL_FROM] = list(zip(*[df[n] for n in idx_in.names], strict=False))
+    df[COL_TO] = list(zip(*[df[n] for n in idx_out.names], strict=False))
 
     # filter: TODO, faster way?
     df = df.loc[df[COL_FROM].isin(idx_in)]
@@ -180,7 +175,7 @@ def create_weight_map(
     return ds_weight_map
 
 
-def validate_multiindex(item: Union[Index, Series, DataFrame]):
+def validate_multiindex(item: Index | Series | DataFrame):
     if isinstance(item, (Series, DataFrame)):
         item = item.index
     assert isinstance(item, MultiIndex)
@@ -191,12 +186,12 @@ def validate_multiindex(item: Union[Index, Series, DataFrame]):
 
 def transform_pandas(
     vtype: VariableType,
-    data: Union[DataFrame, Series, float],
-    weights: Union[Index, Series, Tuple[Union[Index, Series]]],
-    dim_in: Union[Index, Series] = None,
-    dim_out: Union[Index, Series] = None,
+    data: DataFrame | Series | float,
+    weights: Index | Series | tuple[Index | Series],
+    dim_in: Index | Series = None,
+    dim_out: Index | Series = None,
     validate: bool = True,
-) -> Union[DataFrame, Series, float]:
+) -> DataFrame | Series | float:
     """(dis-)aggregate data (pandas).
 
     Parameters

@@ -45,7 +45,7 @@ Helper to create the mapping
 
 """
 
-from typing import Mapping, Tuple
+from collections.abc import Mapping
 
 from .utils import (
     as_set,
@@ -66,7 +66,7 @@ VALIDATE_EQ_REL_TOLERANCE = 1e-10
 def transform(
     vtype: VariableType,
     data: Mapping[F, V],
-    weight_map: Mapping[Tuple[F, T], float],
+    weight_map: Mapping[tuple[F, T], float],
     weights_from: Mapping[F, float] = None,
     weights_to: Mapping[T, float] = None,
     weight_rel_threshold: float = 0.0,

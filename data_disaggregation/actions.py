@@ -1,5 +1,4 @@
-"""Functions to perform data transformations.
-"""
+"""Functions to perform data transformations."""
 
 from .base import transform
 from .ext import transform_pandas

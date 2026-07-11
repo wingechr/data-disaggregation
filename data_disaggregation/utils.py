@@ -1,8 +1,7 @@
-"""utility functions
-"""
+"""utility functions"""
 
+from collections.abc import Callable, Mapping
 import math
-from typing import Callable, List, Mapping, Tuple
 
 from pandas import DataFrame, Index, Series
 
@@ -23,6 +22,7 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     -------
     : Mapping
         list of (unique key, sum of values) pairs
+
     """
 
     res = {}
@@ -38,7 +38,7 @@ def group_sum(key_vals: Mapping, get_key: Callable = None) -> Mapping:
     return res
 
 
-def weighted_sum(value_normweights: Tuple[float]) -> float:
+def weighted_sum(value_normweights: tuple[float]) -> float:
     """get sum product.
 
     Parameters
@@ -57,7 +57,7 @@ def weighted_sum(value_normweights: Tuple[float]) -> float:
     return sum(v * w for v, w in value_normweights)
 
 
-def weighted_mode(value_normweights: Tuple):
+def weighted_mode(value_normweights: tuple):
     """get most common value (but by weight)
 
     Parameters
@@ -70,6 +70,7 @@ def weighted_mode(value_normweights: Tuple):
     Returns
     -------
     Any
+
     """
     # make values unique (sum weights)
     value_normweights = group_sum(value_normweights).items()
@@ -77,7 +78,7 @@ def weighted_mode(value_normweights: Tuple):
     return sorted(value_normweights, key=lambda vw: vw[1], reverse=True)[0][0]
 
 
-def weighted_percentile(value_normweights: Tuple, p=0.5):
+def weighted_percentile(value_normweights: tuple, p=0.5):
     """get most median (but by weight)
 
     Parameters
@@ -90,6 +91,7 @@ def weighted_percentile(value_normweights: Tuple, p=0.5):
     Returns
     -------
     Any
+
     """
     # make values unique (sum weights)
     value_normweights = group_sum(value_normweights).items()
@@ -102,7 +104,7 @@ def weighted_percentile(value_normweights: Tuple, p=0.5):
     raise ValueError()
 
 
-def weighted_median(value_normweights: Tuple):
+def weighted_median(value_normweights: tuple):
     """get most median (but by weight)
 
     Parameters
@@ -115,6 +117,7 @@ def weighted_median(value_normweights: Tuple):
     Returns
     -------
     Any
+
     """
     return weighted_percentile(value_normweights, p=0.5)
 
@@ -161,7 +164,7 @@ def as_set(x) -> set:
     return set(as_list(x))
 
 
-def as_list(x) -> List:
+def as_list(x) -> list:
     # meaning: is index
     if is_list(x):
         return x

@@ -1,6 +1,6 @@
 import doctest
-import logging
 from functools import partial
+import logging
 from unittest import TestCase
 
 import numpy as np
@@ -127,8 +127,7 @@ class TestUtils(TestCase):
 
 class TestBase(TestCase):
     def get_example(self, vtype):
-        """
-        M | D  E  F | S | V
+        """M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
         b | 1     2 | 3 | 10
@@ -187,8 +186,7 @@ class TestBasePandasSeries(TestCase):
     """"""
 
     def get_example(self, vtype):
-        """
-        M | D  E  F | S | V
+        """M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
         b | 1     2 | 3 | 10

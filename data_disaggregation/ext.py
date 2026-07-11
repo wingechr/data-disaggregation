@@ -1,6 +1,6 @@
 """extended functions, especially for pandas Series"""
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
@@ -48,27 +48,28 @@ def as_list_of_series_w_multiindex(
     items: Index | Series | tuple[Index | Series],
 ) -> list[Series]:
     # make sure we have a list/tuple
-    if not isinstance(items, (list, tuple)):
-        items = [items]
+    list_items = [items] if not isinstance(items, (list, tuple)) else items
     # make sure we have series:
-    items = [it if isinstance(it, Series) else Series(1, index=it) for it in items]
-    items = [ensure_multiindex(it) for it in items]
-    return items
+    list_items = [
+        it if isinstance(it, Series) else Series(1, index=it) for it in list_items
+    ]
+    list_items = [ensure_multiindex(it) for it in list_items]
+    return list_items
 
 
-def merge_indices(items: list[Series | Index]) -> MultiIndex:
+def merge_indices(items: list[Series] | list[Index]) -> MultiIndex:
     """Create product of unions of indices"""
     # ensure items are multiindices
-    items = [it if isinstance(it, Index) else it.index for it in items]
-    items = [as_multiindex(it) for it in items]
+    list_items = [it if isinstance(it, Index) else it.index for it in items]
+    list_items = [as_multiindex(it) for it in list_items]
     indices = {}
-    for it in items:
+    for it in list_items:
         for idx in it.levels:
             if idx.name not in indices:
                 indices[idx.name] = idx
             else:
                 indices[idx.name] = indices[idx.name].union(idx)
-    return MultiIndex.from_product(indices.values())
+    return MultiIndex.from_product(list(indices.values()))
 
 
 def combine_weights(weights: Index | Series | tuple[Index | Series]) -> Series:
@@ -82,14 +83,14 @@ def combine_weights(weights: Index | Series | tuple[Index | Series]) -> Series:
 
     """
     # make sure we have series:
-    weights = as_list_of_series_w_multiindex(weights)
+    weights_list = as_list_of_series_w_multiindex(weights)
 
     # merge indices
-    idx = merge_indices(weights)
+    idx = merge_indices(weights_list)
 
     # multiply all and drop nan
     result = Series(1, index=idx)
-    for w in weights:
+    for w in weights_list:
         # IMPORTANT: `result *= w` gives a different result, so DONT use it
         result = result * w
 
@@ -245,9 +246,12 @@ def transform_pandas(
         ds_size_in = ensure_multiindex(dim_in)
         idx_in = ds_size_in.index
 
+    idx_in = cast(MultiIndex, idx_in)
+
     # determine output_index
     if dim_out is None:
-        idx_out = get_idx_out(idx_in, ds_weights.index)
+        idx_weights = cast(MultiIndex, ds_weights.index)
+        idx_out = get_idx_out(idx_in, idx_weights)
         ds_size_out = None
     elif isinstance(dim_out, Index):
         idx_out = as_multiindex(dim_out)
@@ -255,6 +259,7 @@ def transform_pandas(
     else:
         ds_size_out = ensure_multiindex(dim_out)
         idx_out = ds_size_out.index
+    idx_out = cast(MultiIndex, idx_out)
 
     if validate:
         validate_multiindex(idx_in)

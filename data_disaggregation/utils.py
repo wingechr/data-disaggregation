@@ -6,7 +6,15 @@ from typing import TypeVar
 
 from pandas import DataFrame, Index, Series
 
-from .vtypes import SCALAR_INDEX_KEY
+F = TypeVar("F")
+T = TypeVar("T")
+V = TypeVar("V")
+
+SCALAR_DIM_NAME = "__SCALAR__"
+# TODO: using None in pandas causes problems with autoconvert to nan
+SCALAR_INDEX_KEY = "__SCALAR__"
+
+SeriesDict = TypeVar("SeriesDict", Series, dict)
 
 K = TypeVar("K")
 K2 = TypeVar("K2")
@@ -36,30 +44,11 @@ def group_sum(key_vals: Iterable[tuple[K, V]]) -> Mapping[K, V]:
     return res
 
 
-def weighted_sum(value_normweights: Iterable[tuple[float, float]]) -> float:
-    """get sum product.
-
-    Parameters
-    ----------
-    value_normweights : list
-        non empty list of (value, weight) pairs.
-        * values must be numerical.
-        * weights must be numerical, positive, and sum up to 1.0.
-
-    Returns
-    -------
-    : float
-
-    """
-    # TODO faster methods with numpy or ?
-    return sum(v * w for v, w in value_normweights)
-
-
 def weighted_sum_ds(ds_data: Series, ds_weights: Series) -> float:
     return (ds_data * ds_weights).sum()
 
 
-def weighted_mode(value_normweights: Iterable[tuple]):
+def weighted_mode_ds(ds_data: Series, ds_weights: Series):
     """get most common value (but by weight)
 
     Parameters
@@ -74,24 +63,15 @@ def weighted_mode(value_normweights: Iterable[tuple]):
     Any
 
     """
-    # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights).items()
-    # first element of item with highest value
-    return sorted(value_normweights, key=lambda vw: vw[1], reverse=True)[0][0]
-
-
-def ascending_values_sum_weights_ds(ds_data: Series, ds_weights: Series) -> Series:
     return (
-        ds_weights.set_axis(ds_data.values)
-        .groupby(level=0)
-        .sum()
+        sum_weight_gruopby_values_ds(ds_data, ds_weights)
         .sort_values(ascending=False)
+        .index[0]
     )
 
 
-def weighted_mode_ds(ds_data: Series, ds_weights: Series):
-    # first element of item with highest value
-    return ascending_values_sum_weights_ds(ds_data, ds_weights).index[0]
+def sum_weight_gruopby_values_ds(ds_data: Series, ds_weights: Series) -> Series:
+    return ds_weights.set_axis(ds_data.values).groupby(level=0).sum()
 
 
 def weighted_percentile(value_normweights: Iterable[tuple], p=0.5):
@@ -124,12 +104,12 @@ def weighted_percentile(value_normweights: Iterable[tuple], p=0.5):
 
 def weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
     # make values unique (sum weights)
-    ds_grouped = ascending_values_sum_weights_ds(ds_data, ds_weights)
+    ds_grouped = sum_weight_gruopby_values_ds(ds_data, ds_weights).sort_index()
     # find first index where cum sum >= p
     return ds_grouped.cumsum().ge(p).idxmax()
 
 
-def weighted_median(value_normweights: Iterable[tuple]):
+def weighted_median_ds(ds_data: Series, ds_weights: Series):
     """get most median (but by weight)
 
     Parameters
@@ -144,10 +124,6 @@ def weighted_median(value_normweights: Iterable[tuple]):
     Any
 
     """
-    return weighted_percentile(value_normweights, p=0.5)
-
-
-def weighted_median_ds(ds_data: Series, ds_weights: Series):
     return weighted_percentile_ds(ds_data, ds_weights, p=0.5)
 
 
@@ -224,3 +200,9 @@ def as_scalar(x):
 def is_map(x) -> bool:
     """TODO: this is slow"""
     return is_mapping(x) and all(len(k) == 2 for k in get_keys(x))
+
+
+def as_series(x: SeriesDict) -> Series:
+    if isinstance(x, Series):
+        return x
+    return Series(x)

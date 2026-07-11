@@ -22,18 +22,18 @@ from data_disaggregation.ext import (
     transform_pandas,
 )
 from data_disaggregation.utils import (
+    SCALAR_INDEX_KEY,
     as_mapping,
     group_sum,
     is_list,
     is_mapping,
     is_na,
     is_scalar,
-    weighted_median,
-    weighted_mode,
-    weighted_sum,
+    weighted_median_ds,
+    weighted_mode_ds,
+    weighted_sum_ds,
 )
 from data_disaggregation.vtypes import (
-    SCALAR_INDEX_KEY,
     VT_Nominal,
     VT_Numeric,
     VT_NumericExt,
@@ -48,6 +48,9 @@ logging.basicConfig(
 
 
 class TestUtils(TestCase):
+    ds_data1 = Series([3, 2, 1])
+    ds_weights1 = Series([0.4, 0.25, 0.35])
+
     def test_groupsum(self):
         res = group_sum([("a", 1), ("a", 2), (3, 4), ((0, 0), 5), ((0, 0), 5)])
         res_d = dict(res)
@@ -58,15 +61,15 @@ class TestUtils(TestCase):
         self.assertEqual(res_d[(0, 0)], 10)
 
     def test_weighted_mode(self):
-        res = weighted_mode([(3, 0.4), (2, 0.25), (1, 0.35)])
+        res = weighted_mode_ds(self.ds_data1, self.ds_weights1)
         self.assertEqual(res, 3)
 
     def test_weighted_median(self):
-        res = weighted_median([(3, 0.4), (2, 0.25), (1, 0.35)])
+        res = weighted_median_ds(self.ds_data1, self.ds_weights1)
         self.assertEqual(res, 2)
 
     def test_weighted_sum(self):
-        res = weighted_sum([(3, 0.4), (2, 0.25), (1, 0.35)])
+        res = weighted_sum_ds(self.ds_data1, self.ds_weights1)
         self.assertAlmostEqual(res, 2.05)
 
     def test_is_na(self):

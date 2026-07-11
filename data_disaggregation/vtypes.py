@@ -1,41 +1,34 @@
 """Type classes for data."""
 
 from abc import ABC
-from typing import TypeVar
 
 from pandas import Series
 
-from . import utils
-
-F = TypeVar("F")
-T = TypeVar("T")
-V = TypeVar("V")
-
-SCALAR_DIM_NAME = "__SCALAR__"
-# TODO: using None in pandas causes problems with autoconvert to nan
-SCALAR_INDEX_KEY = "__SCALAR__"
+from .utils import (
+    weighted_median_ds,
+    weighted_mode_ds,
+    weighted_sum_ds,
+)
 
 
 class VariableType(ABC):
     @classmethod
-    def weighted_aggregate(cls, data):
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
         """aggregate data
 
         Parameters
         ----------
-        data : Iterable
+        ds_data: Series
             non empty list of (value, weight) pairs.
             weights must be numerical, positive, and sum up to 1.0.
+        ds_weights: Series
+            TODO
 
         Returns
         -------
         aggregated value
 
         """
-        raise NotImplementedError()
-
-    @classmethod
-    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
         raise NotImplementedError()
 
 
@@ -48,29 +41,14 @@ class VT_Nominal(VariableType):
     """
 
     @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_mode(data)
-
-    @classmethod
     def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
-        return utils.weighted_mode_ds(ds_data, ds_weights)
+        return weighted_mode_ds(ds_data, ds_weights)
 
 
 class VT_Ordinal(VT_Nominal):
-    """Type class for ordinal data (ranked categorical).
-
-    - Aggregation method: median
-    - Disaggregation method: keep value
-    - Examples: Level of agreement
-    """
-
-    @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_median(data)
-
     @classmethod
     def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
-        return utils.weighted_median_ds(ds_data, ds_weights)
+        return weighted_median_ds(ds_data, ds_weights)
 
 
 class VT_Numeric(VariableType):
@@ -84,12 +62,22 @@ class VT_Numeric(VariableType):
     """
 
     @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_sum(data)
-
-    @classmethod
     def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
-        return utils.weighted_sum_ds(ds_data, ds_weights)
+        """get sum product.
+
+        Parameters
+        ----------
+        value_normweights : list
+            non empty list of (value, weight) pairs.
+            * values must be numerical.
+            * weights must be numerical, positive, and sum up to 1.0.
+
+        Returns
+        -------
+        : float
+
+        """
+        return weighted_sum_ds(ds_data, ds_weights)
 
 
 class VT_NumericExt(VT_Numeric):

@@ -45,11 +45,11 @@ Helper to create the mapping
 
 """
 
-from collections.abc import Mapping
-
 from pandas import Series
 
 from .utils import (
+    SeriesDict,
+    as_series,
     as_set,
     get_keys,
     get_values,
@@ -58,12 +58,14 @@ from .utils import (
     is_subset,
     is_unique,
 )
-from .vtypes import F, T, V, VariableType, VT_NumericExt
+from .vtypes import VariableType, VT_NumericExt
 
 VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
-def _validate(data, weight_map, weights_from, weights_to):
+def _validate(
+    data: Series, weight_map: Series, weights_from: Series, weights_to: Series
+):
     # validate size_f
     assert is_mapping(weights_from)
     assert is_unique(weights_from)
@@ -95,13 +97,13 @@ def _validate(data, weight_map, weights_from, weights_to):
 
 def transform(
     vtype: type[VariableType],
-    data: Mapping[F, V],
-    weight_map: Mapping[tuple[F, T], float],
-    weights_from: Mapping[F, float] | None = None,
-    weights_to: Mapping[T, float] | None = None,
+    data: SeriesDict,
+    weight_map: SeriesDict,
+    weights_from: SeriesDict | None = None,
+    weights_to: SeriesDict | None = None,
     weight_rel_threshold: float = 0.0,
     validate: bool = True,
-) -> Mapping[T, V]:
+) -> SeriesDict:
     """(dis-)aggregate data.
 
     Parameters
@@ -133,42 +135,45 @@ def transform(
         output data as a mapping from output keys (any hashable) to values.
 
     """
-    data = Series(data)
-    weight_map = Series(weight_map)
-    weights_from = Series(weights_from) if weights_from is not None else None
-    weights_to = Series(weights_to) if weights_to is not None else None
 
-    return _transform(
+    ds_data = as_series(data)
+    ds_weight_map = as_series(weight_map)
+
+    if weights_from is None:
+        # group by index level 0
+        ds_weights_from = ds_weight_map.groupby(level=0).sum()
+    else:
+        ds_weights_from = as_series(weights_from)
+
+    if weights_to is None:
+        # group by index level 1
+        ds_weights_to = ds_weight_map.groupby(level=1).sum()
+    else:
+        ds_weights_to = as_series(weights_to)
+
+    if validate:
+        _validate(ds_data, ds_weight_map, ds_weights_from, ds_weights_to)
+
+    ds_result = _transform(
         vtype,
-        data,
-        weight_map,
-        weights_from,
-        weights_to,
+        ds_data,
+        ds_weight_map,
+        ds_weights_from,
+        ds_weights_to,
         weight_rel_threshold,
-        validate,
     )
+
+    return type(data)(ds_result)
 
 
 def _transform(
     vtype: type[VariableType],
     data: Series,
     weight_map: Series,  # must have multiindex
-    weights_from: Series | None = None,
-    weights_to: Series | None = None,
+    weights_from: Series,
+    weights_to: Series,
     weight_rel_threshold: float = 0.0,
-    validate: bool = False,
-) -> Mapping[T, V]:
-    if weights_from is None:
-        # group by index level 0
-        weights_from = weight_map.groupby(level=0).sum()
-
-    if weights_to is None:
-        # group by index level 1
-        weights_to = weight_map.groupby(level=1).sum()
-
-    if validate:
-        _validate(data, weight_map, weights_from, weights_to)
-
+) -> Series:
     # filter nan in data
     data = data.dropna()
 
@@ -178,9 +183,6 @@ def _transform(
 
     # filter unused in weight_map: input:
     weight_map = weight_map[weight_map.index.get_level_values(0).isin(data.index)]
-    # weight_map = {
-    #    (f, t): w for (f, t), w in weight_map.items() if weights_to.get(t, 0) > 0
-    # }
     weight_map = weight_map.loc[
         weights_to.reindex(weight_map.index.get_level_values(1))
         .set_axis(weight_map.index)
@@ -188,46 +190,16 @@ def _transform(
         > 0
     ]
 
-    # filter unused in weight_map: output
-
-    # init groups
-    # group data by output keys
-
-    # _groups = defaultdict(list)
-    # for (f, t), w in weight_map.items():
-    #    _groups[t].append((data[f], w))
-
     # group to second level
     df_weight_map = weight_map.unstack(level=0)
-
-    # create weight sums
-    # group_sumw = {t: sum(w for _, w in vws) for t, vws in groups.items()}
-    # group_sumw = weight_map.groupby(level=1).sum()
     group_sumw = df_weight_map.sum(axis=1)
 
     # drop groups under threshold
     if weight_rel_threshold:
-        # sumw_rel = {t: sumw / weights_to[t] for t, sumw in group_sumw.items()}
         sumw_rel = group_sumw / weights_to.reindex(group_sumw.index)
         # NOTE: sumw_rel,index is also df_weight_map.index
-
         _filter = sumw_rel >= weight_rel_threshold
         df_weight_map = df_weight_map.loc[_filter]
-
-        # _groups = {
-        #    t: vws for t, vws in _groups.items() if sumw_rel[t] >= weight_rel_threshold
-        # }
-
-        # _groups = {
-        #    idx: [(data.loc[i], v) for i, v in weights.items()]
-        #    for idx, weights in df_weight_map.iterrows()
-        # }
-
-    # aggregate
-    # result = {
-    #    t: vtype.weighted_aggregate([(v, w / group_sumw[t]) for v, w in vws])
-    #    for t, vws in _groups.items()
-    # }
 
     def agg_r(row_weights):
         t = row_weights.name
@@ -240,7 +212,6 @@ def _transform(
 
     #  re-scale intensive => extensive
     if vtype == VT_NumericExt:
-        # result = {t: v * weights_to[t] for t, v in result.items()}
         result = result * weights_to.reindex(result.index)
 
     return result

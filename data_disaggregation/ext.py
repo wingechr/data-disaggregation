@@ -1,20 +1,18 @@
 """extended functions, especially for pandas Series"""
 
-from typing import TypeVar, cast
+from typing import cast
 
 import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
 from .base import transform
-from .utils import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, is_scalar
+from .utils import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, SeriesFrame, is_scalar
 from .vtypes import VariableType
 
 IDX_SCALAR = MultiIndex.from_product([Index([SCALAR_INDEX_KEY], name=SCALAR_DIM_NAME)])
 COL_WEIGHT = "__WEIGHT__"
 COL_FROM = "__FROM__"
 COL_TO = "__TO__"
-
-SeriesFrame = TypeVar("SeriesFrame", Series, DataFrame)
 
 
 def harmonize_input_data(data: DataFrame | Series | float) -> DataFrame:
@@ -316,7 +314,7 @@ def transform_pandas(
         s_res_col = Series(res_col, name=s_col.name)
         df_result[s_col.name] = s_res_col
 
-    return format_result(
+    result = format_result(
         df_result,
         input_is_df=isinstance(data, DataFrame),
         output_is_scalar=idx_out.equals(IDX_SCALAR),
@@ -324,3 +322,5 @@ def transform_pandas(
             True if dim_out is None else isinstance(idx_out, MultiIndex)
         ),
     )
+
+    return result  # type:ignore

@@ -3,7 +3,7 @@
 import math
 from typing import TypeVar
 
-from pandas import Series
+from pandas import DataFrame, Series
 
 F = TypeVar("F")
 T = TypeVar("T")
@@ -13,7 +13,7 @@ K2 = TypeVar("K2")
 V = TypeVar("V")
 
 SeriesDict = TypeVar("SeriesDict", Series, dict)
-
+SeriesFrame = TypeVar("SeriesFrame", Series, DataFrame)
 
 SCALAR_DIM_NAME = "__SCALAR__"
 # TODO: using None in pandas causes problems with autoconvert to nan

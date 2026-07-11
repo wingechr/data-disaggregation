@@ -192,7 +192,7 @@ def validate_multiindex(item: Index | Series | DataFrame):
 
 
 def transform_pandas(
-    vtype: VariableType,
+    vtype: type[VariableType],
     data: DataFrame | Series | float,
     weights: Index | Series | tuple[Index | Series],
     dim_in: Index | Series | None = None,

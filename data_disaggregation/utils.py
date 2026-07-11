@@ -133,7 +133,7 @@ def weighted_percentile(value_normweights: Iterable[tuple], p=0.5):
     raise ValueError()
 
 
-def weighted_median(value_normweights: tuple):
+def weighted_median(value_normweights: Iterable[tuple]):
     """get most median (but by weight)
 
     Parameters

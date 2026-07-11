@@ -65,7 +65,7 @@ VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
 def transform(
-    vtype: VariableType,
+    vtype: type[VariableType],
     data: Mapping[F, V],
     weight_map: Mapping[tuple[F, T], float],
     weights_from: Mapping[F, float] | None = None,

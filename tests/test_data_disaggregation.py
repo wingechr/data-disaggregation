@@ -50,7 +50,7 @@ logging.basicConfig(
 
 class TestUtils(TestCase):
     def test_groupsum(self):
-        res = group_sum([["a", 1], ("a", 2), (3, 4), ((0, 0), 5), ((0, 0), 5)])
+        res = group_sum([("a", 1), ("a", 2), (3, 4), ((0, 0), 5), ((0, 0), 5)])
         res_d = dict(res)
 
         self.assertEqual(len(res), len(res_d))
@@ -59,15 +59,15 @@ class TestUtils(TestCase):
         self.assertEqual(res_d[(0, 0)], 10)
 
     def test_weighted_mode(self):
-        res = weighted_mode([(3, 0.4), (2, 0.25), [1, 0.35]])
+        res = weighted_mode([(3, 0.4), (2, 0.25), (1, 0.35)])
         self.assertEqual(res, 3)
 
     def test_weighted_median(self):
-        res = weighted_median([(3, 0.4), (2, 0.25), [1, 0.35]])
+        res = weighted_median([(3, 0.4), (2, 0.25), (1, 0.35)])
         self.assertEqual(res, 2)
 
     def test_weighted_sum(self):
-        res = weighted_sum([(3, 0.4), (2, 0.25), [1, 0.35]])
+        res = weighted_sum([(3, 0.4), (2, 0.25), (1, 0.35)])
         self.assertAlmostEqual(res, 2.05)
 
     def test_is_na(self):
@@ -95,7 +95,7 @@ class TestUtils(TestCase):
             (1, 2, 3),
             MultiIndex.from_product([[1, 2]]),
             Index(["a", "b"]),
-            set([1, 2]),
+            {1, 2},
         ]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
             self.assertEqual(res, (False, True, False), x)
@@ -127,7 +127,9 @@ class TestUtils(TestCase):
 
 class TestBase(TestCase):
     def get_example(self, vtype):
-        """M | D  E  F | S | V
+        """example
+
+        M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
         b | 1     2 | 3 | 10
@@ -145,7 +147,7 @@ class TestBase(TestCase):
         ]
 
         """
-        map = {
+        mapping = {
             ("a", "F"): 2,
             ("b", "D"): 1,
             ("b", "F"): 2,
@@ -155,7 +157,7 @@ class TestBase(TestCase):
 
         var = {"a": 5, "b": 10, "c": 30}
 
-        return transform(vtype=vtype, data=var, weight_map=map)
+        return transform(vtype=vtype, data=var, weight_map=mapping)
 
     def test_example_type_categorical(self):
         res = self.get_example(VT_Nominal)
@@ -183,10 +185,10 @@ class TestBase(TestCase):
 
 
 class TestBasePandasSeries(TestCase):
-    """"""
-
     def get_example(self, vtype):
-        """M | D  E  F | S | V
+        """example
+
+        M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
         b | 1     2 | 3 | 10
@@ -294,7 +296,9 @@ class TestBaseExamples(TestCase):
         self.assertAlmostEqual(res.get("01", 0), 0)
 
     def test_scalar_key_none(self):
-        """when using None as ley for scalars,
+        """test_scalar_key_none
+
+        when using None as ley for scalars,
         pandas series index converts it no nan.
         because nan != nan, group sum no longer works
         """

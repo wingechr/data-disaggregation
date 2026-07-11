@@ -1,47 +1,23 @@
 """utility functions"""
 
-from collections.abc import Callable, Collection, Iterable, Mapping
 import math
 from typing import TypeVar
 
-from pandas import DataFrame, Index, Series
+from pandas import Series
 
 F = TypeVar("F")
 T = TypeVar("T")
 V = TypeVar("V")
-
-SCALAR_DIM_NAME = "__SCALAR__"
-# TODO: using None in pandas causes problems with autoconvert to nan
-SCALAR_INDEX_KEY = "__SCALAR__"
-
-SeriesDict = TypeVar("SeriesDict", Series, dict)
-
 K = TypeVar("K")
 K2 = TypeVar("K2")
 V = TypeVar("V")
 
+SeriesDict = TypeVar("SeriesDict", Series, dict)
 
-def group_sum(key_vals: Iterable[tuple[K, V]]) -> Mapping[K, V]:
-    """simple group sum.
 
-    Parameters
-    ----------
-    key_vals: Mapping
-        * keys can be anything hashable,
-        * values must be numerical
-
-    Returns
-    -------
-    : Mapping
-        list of (unique key, sum of values) pairs
-
-    """
-
-    res = {}
-    for k, v in key_vals:
-        res[k] = res.get(k, 0) + v
-
-    return res
+SCALAR_DIM_NAME = "__SCALAR__"
+# TODO: using None in pandas causes problems with autoconvert to nan
+SCALAR_INDEX_KEY = "__SCALAR__"
 
 
 def weighted_sum_ds(ds_data: Series, ds_weights: Series) -> float:
@@ -74,7 +50,7 @@ def sum_weight_gruopby_values_ds(ds_data: Series, ds_weights: Series) -> Series:
     return ds_weights.set_axis(ds_data.values).groupby(level=0).sum()
 
 
-def weighted_percentile(value_normweights: Iterable[tuple], p=0.5):
+def weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
     """get most median (but by weight)
 
     Parameters
@@ -91,18 +67,6 @@ def weighted_percentile(value_normweights: Iterable[tuple], p=0.5):
     Any
 
     """
-    # make values unique (sum weights)
-    value_normweights = group_sum(value_normweights).items()
-    # get cumulative weights, ordered by value
-    wsum = 0
-    for v, w in sorted(value_normweights, key=lambda vw: vw[0]):
-        wsum += w
-        if wsum >= p:
-            return v
-    raise ValueError()
-
-
-def weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
     # make values unique (sum weights)
     ds_grouped = sum_weight_gruopby_values_ds(ds_data, ds_weights).sort_index()
     # find first index where cum sum >= p
@@ -133,73 +97,6 @@ def is_na(x) -> bool:
 
 def is_scalar(x) -> bool:
     return isinstance(x, (str, int, float, bool)) or is_na(x)
-
-
-def is_list(x) -> bool:
-    return isinstance(x, (list, tuple, set, Index))
-
-
-def is_mapping(x) -> bool:
-    return isinstance(x, (dict, Series, DataFrame))
-
-
-def is_unique(x) -> bool:
-    x = as_collection(x)
-    return len(x) == len(set(x))
-
-
-def is_subset(a, b):
-    return set(as_collection(a)) <= set(as_collection(b))
-
-
-def get_values(x) -> Collection:
-    values = x.values
-    if isinstance(values, Callable):
-        values = values()
-    return values
-
-
-def get_keys(x) -> Collection:
-    return x.keys()
-
-
-def as_set(x) -> set:
-    return set(as_collection(x))
-
-
-def as_collection(x) -> Collection:
-    # meaning: is index
-    if is_list(x):
-        return x
-    elif is_mapping(x):
-        if isinstance(x, (DataFrame, Series)):
-            return x.index
-        return list(x.keys())  # TODO maybe wrap in list
-    raise TypeError(x)
-
-
-def as_mapping(x, default_val=1) -> Mapping:
-    if is_mapping(x):
-        return x
-    elif is_list(x):
-        return dict.fromkeys(x, default_val)
-    elif is_scalar(x):
-        return {SCALAR_INDEX_KEY: x}
-    raise TypeError(x)
-
-
-def as_scalar(x):
-    if as_scalar(x):
-        return x
-    elif is_mapping(x):
-        assert set(x.keys()) == {SCALAR_INDEX_KEY}
-        return x[SCALAR_INDEX_KEY]
-    raise TypeError(x)
-
-
-def is_map(x) -> bool:
-    """TODO: this is slow"""
-    return is_mapping(x) and all(len(k) == 2 for k in get_keys(x))
 
 
 def as_series(x: SeriesDict) -> Series:

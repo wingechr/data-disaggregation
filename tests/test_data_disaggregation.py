@@ -23,12 +23,7 @@ from data_disaggregation.ext import (
 )
 from data_disaggregation.utils import (
     SCALAR_INDEX_KEY,
-    as_mapping,
-    group_sum,
-    is_list,
-    is_mapping,
     is_na,
-    is_scalar,
     weighted_median_ds,
     weighted_mode_ds,
     weighted_sum_ds,
@@ -50,15 +45,6 @@ logging.basicConfig(
 class TestUtils(TestCase):
     ds_data1 = Series([3, 2, 1])
     ds_weights1 = Series([0.4, 0.25, 0.35])
-
-    def test_groupsum(self):
-        res = group_sum([("a", 1), ("a", 2), (3, 4), ((0, 0), 5), ((0, 0), 5)])
-        res_d = dict(res)
-
-        self.assertEqual(len(res), len(res_d))
-        self.assertEqual(res_d["a"], 3)
-        self.assertEqual(res_d[3], 4)
-        self.assertEqual(res_d[(0, 0)], 10)
 
     def test_weighted_mode(self):
         res = weighted_mode_ds(self.ds_data1, self.ds_weights1)
@@ -85,46 +71,6 @@ class TestUtils(TestCase):
             (np.nan, True),
         ]:
             self.assertEqual(is_na(x), y)
-
-    def test_is_scalar(self):
-        for x in [1, None, "xyz", True]:
-            res = (is_scalar(x), is_list(x), is_mapping(x))
-            self.assertEqual(res, (True, False, False), repr(x))
-
-    def test_is_list(self):
-        for x in [
-            [],
-            (1, 2, 3),
-            MultiIndex.from_product([[1, 2]]),
-            Index(["a", "b"]),
-            {1, 2},
-        ]:
-            res = (is_scalar(x), is_list(x), is_mapping(x))
-            self.assertEqual(res, (False, True, False), x)
-
-    def test_is_mapping(self):
-        for x in [
-            {},
-            Series(dtype=float),
-            Series({1: 1}),
-            DataFrame(dtype=float),
-            DataFrame({"a": [1, 2, 3]}),
-        ]:
-            res = (is_scalar(x), is_list(x), is_mapping(x))
-            self.assertEqual(res, (False, False, True), x)
-
-    def test_as_mapping(self):
-        # is mapping
-        res = as_mapping({"a": 1, "b": 1})
-        self.assertDictEqual(res, {"a": 1, "b": 1})
-
-        # is list
-        res = as_mapping(["a", "b"])
-        self.assertDictEqual(res, {"a": 1, "b": 1})
-
-        # is scalar
-        res = as_mapping(99)
-        self.assertDictEqual(res, {SCALAR_INDEX_KEY: 99})
 
 
 class TestBase(TestCase):

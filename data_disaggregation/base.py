@@ -47,52 +47,35 @@ Helper to create the mapping
 
 from pandas import Series
 
-from .utils import (
-    SeriesDict,
-    as_series,
-    as_set,
-    get_keys,
-    get_values,
-    is_map,
-    is_mapping,
-    is_subset,
-    is_unique,
-)
+from .utils import SeriesDict, as_series
 from .vtypes import VariableType, VT_NumericExt
-
-VALIDATE_EQ_REL_TOLERANCE = 1e-10
 
 
 def _validate(
     data: Series, weight_map: Series, weights_from: Series, weights_to: Series
 ):
     # validate size_f
-    assert is_mapping(weights_from)
-    assert is_unique(weights_from)
-    assert all(v > 0 for v in get_values(weights_from))
+    assert weights_from.index.is_unique
+    assert (weights_from > 0).all()
 
     # validate size_t
-    assert is_mapping(weights_to)
-    assert is_unique(weights_to)
-    assert all(v > 0 for v in get_values(weights_to))
+    assert weights_to.index.is_unique
+    assert (weights_to > 0).all()
 
     # validate var
-    assert is_mapping(data)
-    assert is_unique(data)
+    assert data.index.is_unique
 
-    if not is_subset(data, weights_from):
-        err = as_set(data) - as_set(weights_from)
+    err = set(data.index) - set(weights_from.index)
+    if err:
         raise Exception(
             f"Variable index is not a subset of input dimension subset: {err}"
         )
 
     # validate map
-    assert is_map(weight_map)
-    assert is_unique(weight_map)
-    assert all(v >= 0 for v in get_values(weight_map))
-    assert is_subset([x[0] for x in get_keys(weight_map)], weights_from)
-    assert is_subset([x[1] for x in get_keys(weight_map)], weights_to)
-    # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
+    assert weight_map.index.is_unique
+    assert (weight_map >= 0).all()
+    assert set(weight_map.index.get_level_values(0)) <= set(weights_from.index)
+    assert set(weight_map.index.get_level_values(1)) <= set(weights_to.index)
 
 
 def transform(

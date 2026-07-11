@@ -49,6 +49,8 @@ from collections.abc import Mapping
 
 from .utils import (
     as_set,
+    get_keys,
+    get_values,
     group_idx_first,
     group_idx_second,
     is_map,
@@ -56,7 +58,6 @@ from .utils import (
     is_na,
     is_subset,
     is_unique,
-    iter_values,
 )
 from .vtypes import F, T, V, VariableType, VT_NumericExt
 
@@ -67,8 +68,8 @@ def transform(
     vtype: VariableType,
     data: Mapping[F, V],
     weight_map: Mapping[tuple[F, T], float],
-    weights_from: Mapping[F, float] = None,
-    weights_to: Mapping[T, float] = None,
+    weights_from: Mapping[F, float] | None = None,
+    weights_to: Mapping[T, float] | None = None,
     weight_rel_threshold: float = 0.0,
     validate: bool = True,
 ) -> Mapping[T, V]:
@@ -94,7 +95,7 @@ def transform(
         if the sum of input weights / output weight is smaller than this threshold.
         For example, you may want to set it to 0.5 for geographical mappings with
         extensive data.
-    validate bool:
+    validate: bool
         if True: run additional (but costly) validations of weights and data.
 
     Returns
@@ -113,12 +114,12 @@ def transform(
         # validate size_f
         assert is_mapping(weights_from)
         assert is_unique(weights_from)
-        assert all(v > 0 for v in iter_values(weights_from))
+        assert all(v > 0 for v in get_values(weights_from))
 
         # validate size_t
         assert is_mapping(weights_to)
         assert is_unique(weights_to)
-        assert all(v > 0 for v in iter_values(weights_to))
+        assert all(v > 0 for v in get_values(weights_to))
 
         # validate var
         assert is_mapping(data)
@@ -133,42 +134,45 @@ def transform(
         # validate map
         assert is_map(weight_map)
         assert is_unique(weight_map)
-        assert all(v >= 0 for v in iter_values(weight_map))
-        assert is_subset([x[0] for x in weight_map.keys()], weights_from)
-        assert is_subset([x[1] for x in weight_map.keys()], weights_to)
+        assert all(v >= 0 for v in get_values(weight_map))
+        assert is_subset([x[0] for x in get_keys(weight_map)], weights_from)
+        assert is_subset([x[1] for x in get_keys(weight_map)], weights_to)
         # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
     # filter nan in data
-    data = dict((f, v) for f, v in data.items() if not is_na(v))
+    data = {f: v for f, v in data.items() if not is_na(v)}
 
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
-        data = dict((f, v / weights_from[f]) for f, v in data.items())
+        data = {
+            f: (v / weights_from[f])  # type: ignore (is float in VT_NumericExt)
+            for f, v in data.items()
+        }
 
     # filter unused in weight_map: input:
-    weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
+    weight_map = {(f, t): w for (f, t), w in weight_map.items() if f in data}
 
     # filter unused in weight_map: output
-    weight_map = dict(
-        ((f, t), w) for (f, t), w in weight_map.items() if weights_to.get(t, 0) > 0
-    )
+    weight_map = {
+        (f, t): w for (f, t), w in weight_map.items() if weights_to.get(t, 0) > 0
+    }
 
     # init groups
-    groups = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
+    groups = {t: [] for t in {_t for (_, _t) in get_keys(weight_map)}}
     # group data by output keys
     for (f, t), w in weight_map.items():
         v = data[f]
         groups[t].append((v, w))
 
     # create weight sums
-    group_sumw = dict((t, sum(w for _, w in vws)) for t, vws in groups.items())
+    group_sumw = {t: sum(w for _, w in vws) for t, vws in groups.items()}
 
     # drop groups under threshold
     if weight_rel_threshold:
-        sumw_rel = dict((t, sumw / weights_to[t]) for t, sumw in group_sumw.items())
-        groups = dict(
-            (t, vws) for t, vws in groups.items() if sumw_rel[t] >= weight_rel_threshold
-        )
+        sumw_rel = {t: sumw / weights_to[t] for t, sumw in group_sumw.items()}
+        groups = {
+            t: vws for t, vws in groups.items() if sumw_rel[t] >= weight_rel_threshold
+        }
 
     result = {}
     for t, vws in groups.items():

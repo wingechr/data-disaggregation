@@ -23,7 +23,6 @@ from data_disaggregation.ext import (
 )
 from data_disaggregation.utils import (
     as_mapping,
-    group_idx_first,
     group_sum,
     is_list,
     is_mapping,
@@ -304,7 +303,7 @@ class TestBaseExamples(TestCase):
         """
         d = {(SCALAR_INDEX_KEY, 1): 1, (SCALAR_INDEX_KEY, 2): 2}
         s = Series(d)
-        g = group_idx_first(s)
+        g = s.groupby(level=0).sum()
         self.assertEqual(len(g), 1, "None should be grouped (but nan is not)")
 
     def test_todo(self):
@@ -355,7 +354,7 @@ class TextExtPandas(TestCase):
         else:
             raise NotImplementedError()
 
-        self.assertIsNone(method(left, right))
+        self.assertIsNone(method(left, right))  # type:ignore
 
     def test_remap_series_to_frame_1(self):
         df_exp_res = DataFrame(

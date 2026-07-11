@@ -3,6 +3,8 @@
 from abc import ABC
 from typing import TypeVar
 
+from pandas import Series
+
 from . import utils
 
 F = TypeVar("F")
@@ -32,6 +34,10 @@ class VariableType(ABC):
         """
         raise NotImplementedError()
 
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        raise NotImplementedError()
+
 
 class VT_Nominal(VariableType):
     """Type class for nominal (categorical) data.
@@ -45,6 +51,10 @@ class VT_Nominal(VariableType):
     def weighted_aggregate(cls, data):
         return utils.weighted_mode(data)
 
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        return utils.weighted_mode_ds(ds_data, ds_weights)
+
 
 class VT_Ordinal(VT_Nominal):
     """Type class for ordinal data (ranked categorical).
@@ -57,6 +67,10 @@ class VT_Ordinal(VT_Nominal):
     @classmethod
     def weighted_aggregate(cls, data):
         return utils.weighted_median(data)
+
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        return utils.weighted_median_ds(ds_data, ds_weights)
 
 
 class VT_Numeric(VariableType):
@@ -72,6 +86,10 @@ class VT_Numeric(VariableType):
     @classmethod
     def weighted_aggregate(cls, data):
         return utils.weighted_sum(data)
+
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        return utils.weighted_sum_ds(ds_data, ds_weights)
 
 
 class VT_NumericExt(VT_Numeric):

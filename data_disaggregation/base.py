@@ -50,14 +50,13 @@ from typing import cast
 
 from .utils import (
     as_set,
+    get_values,
     group_idx_first,
     group_idx_second,
-    is_map,
     is_mapping,
     is_na,
     is_subset,
     is_unique,
-    iter_values,
 )
 from .vtypes import F, T, V, VariableType, VT_NumericExt
 
@@ -68,12 +67,12 @@ def _validate(weights_from, weights_to, weight_map, data):
     # validate size_f
     assert is_mapping(weights_from)
     assert is_unique(weights_from)
-    assert all(v > 0 for v in iter_values(weights_from))
+    assert all(v > 0 for v in get_values(weights_from))
 
     # validate size_t
     assert is_mapping(weights_to)
     assert is_unique(weights_to)
-    assert all(v > 0 for v in iter_values(weights_to))
+    assert all(v > 0 for v in get_values(weights_to))
 
     # validate var
     assert is_mapping(data)
@@ -86,11 +85,12 @@ def _validate(weights_from, weights_to, weight_map, data):
         )
 
     # validate map
-    assert is_map(weight_map)
     assert is_unique(weight_map)
-    assert all(v >= 0 for v in iter_values(weight_map))
-    assert is_subset([x[0] for x in weight_map], weights_from)
-    assert is_subset([x[1] for x in weight_map], weights_to)
+    assert all(v >= 0 for v in get_values(weight_map))
+
+    # IMPORTANT: don't let ruff remove .keys() (SIM118)
+    assert is_subset([x[0] for x in weight_map.keys()], weights_from.keys())  # noqa: SIM118
+    assert is_subset([x[1] for x in weight_map.keys()], weights_to.keys())  # noqa: SIM118
     # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
 
 

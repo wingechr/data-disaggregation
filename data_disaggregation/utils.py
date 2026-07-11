@@ -1,6 +1,6 @@
 """utility functions"""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, KeysView, Mapping
 import math
 
 from pandas import DataFrame, Index, Series
@@ -142,7 +142,7 @@ def is_scalar(x) -> bool:
 
 
 def is_list(x) -> bool:
-    return isinstance(x, (list, tuple, set, Index))
+    return isinstance(x, (list, tuple, set, Index, KeysView))
 
 
 def is_mapping(x) -> bool:
@@ -158,9 +158,12 @@ def is_subset(a, b):
     return set(as_list(a)) <= set(as_list(b))
 
 
-def iter_values(x):
-    for k in x:
-        yield x[k]
+def get_values(x):
+    values = x.values
+    if isinstance(values, Callable):
+        values = values()
+
+    return values
 
 
 def as_set(x) -> set:
@@ -175,7 +178,7 @@ def as_list(x) -> list:
         if isinstance(x, (DataFrame, Series)):
             return list(x.index)
         return list(x.keys())  # TODO maybe wrap in list
-    raise TypeError(x)
+    raise TypeError(type(x))
 
 
 def as_mapping(x, default_val=1) -> Mapping:
@@ -195,8 +198,3 @@ def as_scalar(x):
         assert set(x.keys()) == {vtypes.SCALAR_INDEX_KEY}
         return x[vtypes.SCALAR_INDEX_KEY]
     raise TypeError(x)
-
-
-def is_map(mapping) -> bool:
-    """TODO: this is slow"""
-    return is_mapping(mapping) and all(len(k) == 2 for k in mapping)

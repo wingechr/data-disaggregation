@@ -259,7 +259,9 @@ def transform_pandas(
 
     if ds_size_in is None:
         ds_size_in = (
-            ds_weight_map.reset_index().groupby(COL_FROM).sum(COL_WEIGHT)[COL_WEIGHT]
+            ds_weight_map.reset_index()
+            .groupby(COL_FROM)
+            .sum(numeric_only=True)[COL_WEIGHT]
         )
         # fix index
         ds_size_in.index = MultiIndex.from_tuples(
@@ -269,7 +271,9 @@ def transform_pandas(
 
     if ds_size_out is None:
         ds_size_out = (
-            ds_weight_map.reset_index().groupby(COL_TO).sum(COL_WEIGHT)[COL_WEIGHT]
+            ds_weight_map.reset_index()
+            .groupby(COL_TO)
+            .sum(numeric_only=True)[COL_WEIGHT]
         )
         # fix index
         ds_size_out.index = MultiIndex.from_tuples(

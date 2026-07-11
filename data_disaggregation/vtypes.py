@@ -1,4 +1,5 @@
-"""Type classes for data."""
+"""Type classes for data.
+"""
 
 from abc import ABC
 from typing import TypeVar
@@ -28,7 +29,6 @@ class VariableType(ABC):
         Returns
         -------
         aggregated value
-
         """
         raise NotImplementedError()
 

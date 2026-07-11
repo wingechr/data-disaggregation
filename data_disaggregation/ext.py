@@ -67,7 +67,6 @@ def merge_indices(items: list[Series | Index]) -> MultiIndex:
 
 def combine_weights(weights: Index | Series | tuple[Index | Series]) -> Series:
     """multiply all weights series
-
     * join on overlapping columns (or all if none
     * if index and not series: use value 1
 
@@ -116,7 +115,7 @@ def format_result(df, input_is_df, output_is_scalar, output_multiindex):
 
 def get_idx_out(idx_in: MultiIndex, idx_weights: MultiIndex) -> MultiIndex:
     idx_all = merge_indices([idx_in, idx_weights])
-    idx_levels = dict(zip(idx_all.names, idx_all.levels, strict=False))
+    idx_levels = dict(zip(idx_all.names, idx_all.levels))
 
     idx_names_only_in = set(idx_in.names) - set(idx_weights.names)
     idx_names_only_weights = set(idx_weights.names) - set(idx_in.names)
@@ -154,7 +153,6 @@ def create_weight_map(
     ds_weights: Series, idx_in: MultiIndex, idx_out: MultiIndex
 ) -> Series:
     """Returns weight Series
-
     Index is 2 dimensional (F, T), each part is a tuple from idx_in, idx_out
     for overlapping levels: left == right
 
@@ -162,8 +160,8 @@ def create_weight_map(
     idx_all = merge_indices([idx_in, idx_out])
     # expand index (TODO: check if weights are dropped??)
     df = remap_series_to_frame(ds_weights, idx_all, COL_WEIGHT)
-    df[COL_FROM] = list(zip(*[df[n] for n in idx_in.names], strict=False))
-    df[COL_TO] = list(zip(*[df[n] for n in idx_out.names], strict=False))
+    df[COL_FROM] = list(zip(*[df[n] for n in idx_in.names]))
+    df[COL_TO] = list(zip(*[df[n] for n in idx_out.names]))
 
     # filter: TODO, faster way?
     df = df.loc[df[COL_FROM].isin(idx_in)]
@@ -258,11 +256,7 @@ def transform_pandas(
     ds_weight_map = create_weight_map(ds_weights, idx_in, idx_out)
 
     if ds_size_in is None:
-        ds_size_in = (
-            ds_weight_map.reset_index()
-            .groupby(COL_FROM)
-            .sum(numeric_only=True)[COL_WEIGHT]
-        )
+        ds_size_in = ds_weight_map.reset_index().groupby(COL_FROM).sum()[COL_WEIGHT]
         # fix index
         ds_size_in.index = MultiIndex.from_tuples(
             ds_size_in.index.values, names=idx_in.names
@@ -270,11 +264,7 @@ def transform_pandas(
         ds_size_in = ds_size_in.loc[ds_size_in > 0]
 
     if ds_size_out is None:
-        ds_size_out = (
-            ds_weight_map.reset_index()
-            .groupby(COL_TO)
-            .sum(numeric_only=True)[COL_WEIGHT]
-        )
+        ds_size_out = ds_weight_map.reset_index().groupby(COL_TO).sum()[COL_WEIGHT]
         # fix index
         ds_size_out.index = MultiIndex.from_tuples(
             ds_size_out.index.values, names=idx_out.names

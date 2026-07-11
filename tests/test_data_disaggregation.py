@@ -1,6 +1,6 @@
 import doctest
-from functools import partial
 import logging
+from functools import partial
 from unittest import TestCase
 
 import numpy as np
@@ -95,7 +95,7 @@ class TestUtils(TestCase):
             (1, 2, 3),
             MultiIndex.from_product([[1, 2]]),
             Index(["a", "b"]),
-            {1, 2},
+            set([1, 2]),
         ]:
             res = (is_scalar(x), is_list(x), is_mapping(x))
             self.assertEqual(res, (False, True, False), x)
@@ -127,8 +127,7 @@ class TestUtils(TestCase):
 
 class TestBase(TestCase):
     def get_example(self, vtype):
-        """get_example
-
+        """
         M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
@@ -147,7 +146,7 @@ class TestBase(TestCase):
         ]
 
         """
-        mapping = {
+        map = {
             ("a", "F"): 2,
             ("b", "D"): 1,
             ("b", "F"): 2,
@@ -157,7 +156,7 @@ class TestBase(TestCase):
 
         var = {"a": 5, "b": 10, "c": 30}
 
-        return transform(vtype=vtype, data=var, weight_map=mapping)
+        return transform(vtype=vtype, data=var, weight_map=map)
 
     def test_example_type_categorical(self):
         res = self.get_example(VT_Nominal)
@@ -185,11 +184,10 @@ class TestBase(TestCase):
 
 
 class TestBasePandasSeries(TestCase):
-    """TODO"""
+    """"""
 
     def get_example(self, vtype):
-        """get_example
-
+        """
         M | D  E  F | S | V
         ====================
         a |       2 | 2 |  5
@@ -298,9 +296,7 @@ class TestBaseExamples(TestCase):
         self.assertAlmostEqual(res.get("01", 0), 0)
 
     def test_scalar_key_none(self):
-        """test_scalar_key_none
-
-        when using None as ley for scalars,
+        """when using None as ley for scalars,
         pandas series index converts it no nan.
         because nan != nan, group sum no longer works
         """

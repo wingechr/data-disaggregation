@@ -59,8 +59,9 @@ NA_DIM_KEY = "__NA__"
 def _assert_index_unique_no_na(index: Index, name: str):
     if not index.is_unique:
         raise Exception(f"index not unique in {name}: {set(index.duplicated())}")
-    if any(index.isna()):
-        raise Exception(f"index contains NA in {name}")
+    for level in range(index.nlevels):
+        if any(index.get_level_values(level).isna()):
+            raise Exception(f"index contains NA in {name}")
     if NA_DIM_KEY in index:
         raise Exception(f"index contains {NA_DIM_KEY} in {name}")
 
@@ -95,11 +96,11 @@ def _create_full_weightmap(
     )
 
     # enforce single index
-    df_weight_map.index = df_weight_map.index.get_level_values(0)
-    df_weight_map.columns = df_weight_map.columns.get_level_values(0)
-    ds_data.index = ds_data.index.get_level_values(0)
-    ds_weights_from.index = ds_weights_from.index.get_level_values(0)
-    ds_weights_to.index = ds_weights_to.index.get_level_values(0)
+    # df_weight_map.index = df_weight_map.index.get_level_values(0)
+    # df_weight_map.columns = df_weight_map.columns.get_level_values(0)
+    # ds_data.index = ds_data.index.get_level_values(0)
+    # ds_weights_from.index = ds_weights_from.index.get_level_values(0)
+    # ds_weights_to.index = ds_weights_to.index.get_level_values(0)
 
     # all indices must be unique and not NA
     _assert_index_unique_no_na(ds_data.index, "data")
@@ -242,6 +243,7 @@ def _transform(
 ) -> Series:
     ds_data = ds_data.reindex(df_weight_map.index)
 
+    print(df_weight_map)
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
         ds_weights_from = df_weight_map.sum(axis=1)
@@ -264,15 +266,19 @@ def _transform(
             return NA
 
         ds_values = ds_values_incl_na.loc[~idx_val_na]
-        ds_weights_rel = ds_weights_rel.loc[~idx_val_na]
+
+        # FIXME: should we really rescale relative to non na?
+        # ds_weights_rel = ds_weights_rel.loc[~idx_val_na]
+        weights_not_na = weights.loc[~idx_val_na]
+        ds_weights_rel = weights_not_na / weights_not_na.sum()
 
         return vtype.weighted_aggregate_ds(ds_values, ds_weights_rel)
 
-    result = df_weight_map.apply(agg)
+    df_result = df_weight_map.apply(agg)
 
     #  re-scale intensive => extensive
     if vtype == VT_NumericExt:
         ds_weights_to = df_weight_map.sum(axis=0)
-        result = result * ds_weights_to
+        df_result = df_result * ds_weights_to
 
-    return result
+    return df_result

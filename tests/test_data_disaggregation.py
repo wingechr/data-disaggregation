@@ -5,7 +5,7 @@ from unittest import TestCase
 
 import numpy as np
 import pandas as pd
-from pandas import DataFrame, Index, MultiIndex, Series
+from pandas import NA, DataFrame, Index, MultiIndex, Series
 
 from data_disaggregation import ext
 from data_disaggregation.base import transform
@@ -237,11 +237,11 @@ class TestBaseExamples(TestCase):
             weights_to={"00": 1, "01": 1, "11": 2, "10": 2},
             weight_rel_threshold=0.5,
         )
-
+        # FIXME: is this what we want?
         self.assertAlmostEqual(res["00"], 100 / 5)
         self.assertAlmostEqual(res["10"], 100 / 5 * 2)
-        self.assertAlmostEqual(res.get("11", 0), 0)
-        self.assertAlmostEqual(res.get("01", 0), 0)
+        self.assertTrue(res["11"] is NA)
+        self.assertTrue(res["01"] is NA)
 
     def test_scalar_key_none(self):
         """test_scalar_key_none

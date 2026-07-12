@@ -1,5 +1,7 @@
 """Type classes for data."""
 
+from __future__ import annotations  # Series[...] for older python/pandas
+
 from abc import ABC
 import logging
 from math import isclose

@@ -45,6 +45,8 @@ Helper to create the mapping
 
 """
 
+from __future__ import annotations  # Series[...] for older python/pandas
+
 from typing import Any
 
 import pandas as pd

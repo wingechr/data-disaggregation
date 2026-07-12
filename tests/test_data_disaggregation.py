@@ -244,9 +244,6 @@ class TestBaseExamples(TestCase):
         self.assertTrue(res["11"] is NA)
         self.assertTrue(res["01"] is NA)
 
-        # no loss
-        self.assertAlmostEqual(Series(res).sum(), 100)  # type:ignore
-
     def test_scalar_key_none(self):
         """test_scalar_key_none
 

@@ -1,12 +1,13 @@
 """Type classes for data."""
 
 from abc import ABC
+import logging
+from math import isclose
 from typing import Any
 
 from pandas import NA, DataFrame, Series
 
 from .utils import (
-    na_as_0,
     weighted_median_ds,
     weighted_mode_ds,
     weighted_sum_ds,
@@ -40,7 +41,6 @@ class VariableType(ABC):
         df_weight_map: DataFrame,  # >= 0
         ds_weights_from: Series,
         weight_rel_threshold: float = 0.0,
-        na_dim_key: Any = None,
     ) -> Series:
         ds_data = ds_data.reindex(df_weight_map.index)
 
@@ -54,7 +54,7 @@ class VariableType(ABC):
             result = cls.weighted_aggregate_ds(values_not_na, weights_val_not_na)
             return result
 
-        ds_result: Series = df_weight_map.drop(columns=[na_dim_key]).apply(agg)
+        ds_result: Series = df_weight_map.apply(agg)
 
         return ds_result
 
@@ -156,14 +156,12 @@ class VT_NumericExt(VT_Numeric):
         df_weight_map: DataFrame,  # >= 0
         ds_weights_from: Series,
         weight_rel_threshold: float = 0.0,
-        na_dim_key: Any = None,
     ) -> Series:
         # FIXME
         # only for extensive: preserve values that are unmapped
         # and add them to NA output key
-        sum_na = {
-            na_dim_key: ds_data.loc[~ds_data.index.isin(df_weight_map.index)].sum()
-        }
+        sum_data = ds_data.sum()
+
         ds_data = ds_data.reindex(df_weight_map.index)
 
         def agg(ds_weights: Series):
@@ -174,7 +172,6 @@ class VT_NumericExt(VT_Numeric):
             values_not_na = values_not_na * weights_val_not_na / ds_weights_from
 
             if len(weights_val_not_na) == 0 or share_weights_na > weight_rel_threshold:
-                sum_na[na_dim_key] += values_not_na.sum()
                 return NA
 
             result = cls.weighted_aggregate_ds(values_not_na, weights_val_not_na)
@@ -182,10 +179,8 @@ class VT_NumericExt(VT_Numeric):
 
         ds_result: Series = df_weight_map.apply(agg)
 
-        sum_na[na_dim_key] += na_as_0(ds_result[na_dim_key])
-        if sum_na[na_dim_key]:
-            ds_result[na_dim_key] = sum_na[na_dim_key]
-        else:
-            del ds_result[na_dim_key]
+        val_lost = sum_data - ds_result.sum()
+        if not isclose(val_lost, 0):
+            logging.warning("Lossy mapping - lost %s in %s", val_lost, ds_data.name)
 
         return ds_result

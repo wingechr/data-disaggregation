@@ -296,6 +296,8 @@ def transform_pandas(
     idx_out = ds_size_out.index
 
     df_weight_map = ds_weight_map.unstack(level=1)
+    df_weight_map.columns = idx_out
+
     transformer = Transformer(
         vtype=vtype,
         df_weight_map=df_weight_map,
@@ -304,13 +306,7 @@ def transform_pandas(
         weight_rel_threshold=0,
     )
 
-    # apply base function
-    df_result = DataFrame(index=idx_out)
-
-    for name in df_data.columns:
-        df_result[name] = transformer(df_data[name])
-
-    # df_result = df_data.apply(transformer)# FIXME: why is this different
+    df_result = df_data.apply(transformer)  # FIXME: why is this different
 
     result = format_result(
         df_result,

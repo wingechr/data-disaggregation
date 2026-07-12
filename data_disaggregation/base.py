@@ -133,8 +133,8 @@ def _check_initialize_weights(
         ]
     )
 
-    # add NA output col
-    df_weight_map = pd.concat(
+    # add NA output col (temp)
+    df_weight_map_w_na_column = pd.concat(
         [
             df_weight_map,
             ds_weights_from_rest.rename(
@@ -144,7 +144,10 @@ def _check_initialize_weights(
         axis=1,
     )
 
-    ds_weights_from = df_weight_map.sum(axis=1)
+    # df_weight_map.columns = ds_weights_to.index
+    df_weight_map.columns.names = ds_weights_to.index.names
+
+    ds_weights_from = df_weight_map_w_na_column.sum(axis=1)
     ds_weights_to = df_weight_map.sum(axis=0)
 
     return df_weight_map, ds_weights_from, ds_weights_to
@@ -174,18 +177,20 @@ class Transformer:
         self.ds_weights_to: Series = ds_weights_to
         self.vtype: type[VariableType] = vtype
         self.weight_rel_threshold: float = weight_rel_threshold
-        self.na_dim_key = get_NA_DIM_KEY(df_weight_map.columns)
 
     def __call__(self, ds_data: Series) -> Series:
         _assert_index_unique_no_na(ds_data.index, str(ds_data.name))
-        return self.vtype.transform(
-            ds_data=ds_data,
-            df_weight_map=self.df_weight_map,
-            ds_weights_from=self.ds_weights_from,
-            # ds_weights_to=self.ds_weights_to,
-            weight_rel_threshold=self.weight_rel_threshold,
-            na_dim_key=self.na_dim_key,
-        ).rename(ds_data.name)  # type:ignore
+        return (
+            self.vtype.transform(
+                ds_data=ds_data,
+                df_weight_map=self.df_weight_map,
+                ds_weights_from=self.ds_weights_from,
+                # ds_weights_to=self.ds_weights_to,
+                weight_rel_threshold=self.weight_rel_threshold,
+            )
+            .rename(ds_data.name)  # type:ignore
+            .rename_axis(index=self.df_weight_map.columns.names)
+        )  # type:ignore
 
 
 def transform(

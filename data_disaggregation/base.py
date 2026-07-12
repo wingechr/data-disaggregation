@@ -45,37 +45,117 @@ Helper to create the mapping
 
 """
 
-from pandas import Series
+from typing import Any
 
-from .utils import SeriesDict, as_series
+import pandas as pd
+from pandas import NA, DataFrame, Index, Series
+
+from .utils import SeriesDict, SeriesFrame, as_series
 from .vtypes import VariableType, VT_NumericExt
 
+NA_DIM_KEY = "__NA__"
 
-def _validate(
-    data: Series, weight_map: Series, weights_from: Series, weights_to: Series
-):
-    # validate size_f
-    assert weights_from.index.is_unique
-    assert (weights_from > 0).all()
 
-    # validate size_t
-    assert weights_to.index.is_unique
-    assert (weights_to > 0).all()
+def _assert_index_unique_no_na(index: Index, name: str):
+    if not index.is_unique:
+        raise Exception(f"index not unique in {name}: {set(index.duplicated())}")
+    if any(index.isna()):
+        raise Exception(f"index contains NA in {name}")
+    if NA_DIM_KEY in index:
+        raise Exception(f"index contains {NA_DIM_KEY} in {name}")
 
-    # validate var
-    assert data.index.is_unique
 
-    err = set(data.index) - set(weights_from.index)
+def _assert_all_gt0(data: SeriesFrame, name: str):
+    if not all(data > 0):
+        raise Exception(f"Not all values are > 0 in {name}")
+
+
+def _assert_all_ge0(data: SeriesFrame, name: str):
+    if not all(data >= 0):
+        raise Exception(f"Not all values are >= 0 in {name}")
+
+
+def _assert_index_subset(index: Index, ref_index: Index, name: str):
+    err = set(index) - set(ref_index)
     if err:
-        raise Exception(
-            f"Variable index is not a subset of input dimension subset: {err}"
+        raise Exception(f"Unexepcted, additional elements in {name}: {err}")
+
+
+def _create_full_weightmap(
+    ds_data: Series[Any],
+    ds_weight_map: Series[float],
+    ds_weights_from: Series[float],
+    ds_weights_to: Series[float],
+) -> DataFrame:
+    # convert weights to frame, rows = from, cols = to, realign
+    df_weight_map = (
+        ds_weight_map.unstack(level=1)
+        .reindex(index=ds_weights_from.index, columns=ds_weights_to.index)
+        .fillna(0)
+    )
+
+    # enforce single index
+    df_weight_map.index = df_weight_map.index.get_level_values(0)
+    df_weight_map.columns = df_weight_map.columns.get_level_values(0)
+    ds_data.index = ds_data.index.get_level_values(0)
+    ds_weights_from.index = ds_weights_from.index.get_level_values(0)
+    ds_weights_to.index = ds_weights_to.index.get_level_values(0)
+
+    # all indices must be unique and not NA
+    _assert_index_unique_no_na(ds_data.index, "data")
+    _assert_index_unique_no_na(df_weight_map.index, "weights (source)")
+    _assert_index_unique_no_na(df_weight_map.columns, "weights (target)")
+    _assert_index_unique_no_na(ds_weights_from.index, "weights (sum source)")
+    _assert_index_unique_no_na(ds_weights_to.index, "weights (sum target)")
+    _assert_all_gt0(ds_weights_from, "weights (sum source)")
+    _assert_all_gt0(ds_weights_to, "weights (sum target)")
+    _assert_all_ge0(df_weight_map, "weights")
+    # weights have to be in ds_weights_from / ds_weights_to sums
+    _assert_index_subset(df_weight_map.index, ds_weights_from.index, "weights (source)")
+    _assert_index_subset(df_weight_map.columns, ds_weights_to.index, "weights (target)")
+
+    # additional indices with data but no weights
+    idx_data_no_mapping = list(set(ds_data.index) - set(ds_weights_from.index))
+
+    # differences of sum weights and weigh sums
+    ds_weights_from_rest = ds_weights_from - df_weight_map.sum(axis=1)
+    _assert_all_ge0(ds_weights_from_rest, "col weights for NA")
+    ds_weights_to_rest = ds_weights_to - df_weight_map.sum(axis=0)
+    _assert_all_ge0(ds_weights_to_rest, "row weights for NA")
+
+    if idx_data_no_mapping:
+        # add rows
+        df_weight_map = pd.concat(
+            [
+                df_weight_map,
+                pd.DataFrame(
+                    0, index=idx_data_no_mapping, columns=df_weight_map.columns
+                ),
+            ]
+        )
+        ds_1 = Series(1, index=idx_data_no_mapping)
+        ds_weights_from_rest = pd.concat([ds_weights_from_rest, ds_1])
+        ds_weights_from = pd.concat([ds_weights_from, ds_1])
+
+    weights_to_rest_sum = ds_weights_to_rest.sum()
+    if weights_to_rest_sum:
+        # add additional row for NA in source
+        df_weight_map = pd.concat(
+            [df_weight_map, ds_weights_to_rest.to_frame().T.set_axis([NA_DIM_KEY])]
+        )
+        ds_weights_from_rest = pd.concat(
+            [ds_weights_from_rest, Series(0, index=[NA_DIM_KEY])]
+        )
+        ds_weights_from = pd.concat([ds_weights_from, ds_weights_to_rest])
+
+    # if required: add NA output col
+    ds_weights_from_rest_sum = ds_weights_from_rest.sum()
+    if ds_weights_from_rest_sum:
+        df_weight_map = pd.concat(
+            [df_weight_map, ds_weights_from_rest.rename(NA_DIM_KEY)], axis=1
         )
 
-    # validate map
-    assert weight_map.index.is_unique
-    assert (weight_map >= 0).all()
-    assert set(weight_map.index.get_level_values(0)) <= set(weights_from.index)
-    assert set(weight_map.index.get_level_values(1)) <= set(weights_to.index)
+    return df_weight_map
 
 
 def transform(
@@ -85,7 +165,6 @@ def transform(
     weights_from: SeriesDict | None = None,
     weights_to: SeriesDict | None = None,
     weight_rel_threshold: float = 0.0,
-    validate: bool = True,
 ) -> SeriesDict:
     """(dis-)aggregate data.
 
@@ -109,8 +188,6 @@ def transform(
         if the sum of input weights / output weight is smaller than this threshold.
         For example, you may want to set it to 0.5 for geographical mappings with
         extensive data.
-    validate: bool
-        if True: run additional (but costly) validations of weights and data.
 
     Returns
     -------
@@ -120,6 +197,9 @@ def transform(
     """
 
     ds_data = as_series(data)
+    # harmonize NaN/None/NA and drop from data
+    ds_data = ds_data.convert_dtypes().dropna()  # normalize and drop na
+
     ds_weight_map = as_series(weight_map)
 
     if weights_from is None:
@@ -134,67 +214,65 @@ def transform(
     else:
         ds_weights_to = as_series(weights_to)
 
-    if validate:
-        _validate(ds_data, ds_weight_map, ds_weights_from, ds_weights_to)
+    df_weight_map = _create_full_weightmap(
+        ds_data, ds_weight_map, ds_weights_from, ds_weights_to
+    )
 
     ds_result = _transform(
         vtype,
         ds_data,
-        ds_weight_map,
-        ds_weights_from,
-        ds_weights_to,
+        df_weight_map,
         weight_rel_threshold,
     )
+
+    # FIXME: what todo with NA_DIM value - return separately?
+    # currently, the output might have a an additional dimension than user expects
+    # if NA_DIM_KEY in df_weight_map.columns:
+    #    value_na_dim = ds_result.pop(NA_DIM_KEY)
+    # assert tuple(ds_result.index) == tuple(ds_weights_to.index)
 
     return type(data)(ds_result)
 
 
 def _transform(
     vtype: type[VariableType],
-    data: Series,
-    weight_map: Series,  # must have multiindex
-    weights_from: Series,
-    weights_to: Series,
+    ds_data: Series[Any],  # incl. NA
+    df_weight_map: DataFrame,  # >= 0
     weight_rel_threshold: float = 0.0,
 ) -> Series:
-    # filter nan in data
-    data = data.dropna()
+    ds_data = ds_data.reindex(df_weight_map.index)
 
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
-        data = data / weights_from.loc[data.index]
+        ds_weights_from = df_weight_map.sum(axis=1)
+        ds_data = ds_data / ds_weights_from
 
-    # filter unused in weight_map: input:
-    weight_map = weight_map[weight_map.index.get_level_values(0).isin(data.index)]
-    weight_map = weight_map.loc[
-        weights_to.reindex(weight_map.index.get_level_values(1))
-        .set_axis(weight_map.index)
-        .fillna(0)
-        > 0
-    ]
+    def agg(weights: Series):
+        weights = weights.loc[weights > 0]
+        weights_sum = weights.sum()
+        if not weights_sum:
+            # no values
+            return NA
+        ds_weights_rel = weights / weights_sum
+        ds_values_incl_na = ds_data.loc[weights.index]
 
-    # group to second level
-    df_weight_map = weight_map.unstack(level=0)
-    group_sumw = df_weight_map.sum(axis=1)
+        idx_val_na = ds_values_incl_na.isna()
 
-    # drop groups under threshold
-    if weight_rel_threshold:
-        sumw_rel = group_sumw / weights_to.reindex(group_sumw.index)
-        # NOTE: sumw_rel,index is also df_weight_map.index
-        _filter = sumw_rel >= weight_rel_threshold
-        df_weight_map = df_weight_map.loc[_filter]
+        sum_weights_rel_na = ds_weights_rel.loc[idx_val_na].sum()
 
-    def agg_r(row_weights):
-        t = row_weights.name
-        sumw = group_sumw[t]
-        f_weights_rel = row_weights.dropna() / sumw
-        vals = data.loc[f_weights_rel.index]
-        return vtype.weighted_aggregate_ds(vals, f_weights_rel)
+        if sum_weights_rel_na > weight_rel_threshold or idx_val_na.all():
+            return NA
 
-    result = df_weight_map.apply(agg_r, axis=1)
+        ds_values = ds_values_incl_na.loc[~idx_val_na]
+        ds_weights_rel = ds_weights_rel.loc[~idx_val_na]
+
+        return vtype.weighted_aggregate_ds(ds_values, ds_weights_rel)
+
+    result = df_weight_map.apply(agg)
 
     #  re-scale intensive => extensive
     if vtype == VT_NumericExt:
-        result = result * weights_to.reindex(result.index)
+        ds_weights_to = df_weight_map.sum(axis=0)
+        result = result * ds_weights_to
 
     return result

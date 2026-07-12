@@ -308,7 +308,6 @@ def transform_pandas(
             weights_from=ds_size_in,
             weights_to=ds_size_out,
             weight_rel_threshold=0.0,
-            validate=False,  # we do validation in pandas
         )
 
         s_res_col = Series(res_col, name=s_col.name)

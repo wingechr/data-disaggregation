@@ -53,8 +53,14 @@ from pandas import NA, DataFrame, Index, MultiIndex, Series
 from .utils import SeriesDict, SeriesFrame, as_series
 from .vtypes import VariableType, VT_NumericExt
 
-# FIXME: what if multiindex
-NA_DIM_KEY = "__NA__"
+_NA_DIM_KEY = NA  # "__NA__"
+
+
+def get_NA_DIM_KEY(for_index: Index):
+    sample = for_index[0]
+    if isinstance(sample, tuple):
+        return tuple([_NA_DIM_KEY] * len(sample))
+    return _NA_DIM_KEY
 
 
 def _assert_index_unique_no_na(index: Index, name: str):
@@ -63,8 +69,8 @@ def _assert_index_unique_no_na(index: Index, name: str):
     for level in range(index.nlevels):
         if any(index.get_level_values(level).isna()):
             raise Exception(f"index contains NA in {name}")
-    if NA_DIM_KEY in index:
-        raise Exception(f"index contains {NA_DIM_KEY} in {name}")
+    if get_NA_DIM_KEY(index) in index:
+        raise Exception(f"index contains {get_NA_DIM_KEY(index)} in {name}")
 
 
 def _assert_all_gt0(data: SeriesFrame, name: str):
@@ -96,13 +102,6 @@ def _create_full_weightmap(
         .fillna(0)
     )
 
-    # enforce single index
-    # df_weight_map.index = df_weight_map.index.get_level_values(0)
-    # df_weight_map.columns = df_weight_map.columns.get_level_values(0)
-    # ds_data.index = ds_data.index.get_level_values(0)
-    # ds_weights_from.index = ds_weights_from.index.get_level_values(0)
-    # ds_weights_to.index = ds_weights_to.index.get_level_values(0)
-
     # all indices must be unique and not NA
     _assert_index_unique_no_na(ds_data.index, "data")
     _assert_index_unique_no_na(df_weight_map.index, "weights (source)")
@@ -116,49 +115,41 @@ def _create_full_weightmap(
     _assert_index_subset(df_weight_map.index, ds_weights_from.index, "weights (source)")
     _assert_index_subset(df_weight_map.columns, ds_weights_to.index, "weights (target)")
 
-    # additional indices with data but no weights
-    idx_data_no_mapping = list(set(ds_data.index) - set(ds_weights_from.index))
-
     # differences of sum weights and weigh sums
     ds_weights_from_rest = ds_weights_from - df_weight_map.sum(axis=1)
     _assert_all_ge0(ds_weights_from_rest, "col weights for NA")
     ds_weights_to_rest = ds_weights_to - df_weight_map.sum(axis=0)
     _assert_all_ge0(ds_weights_to_rest, "row weights for NA")
 
-    if idx_data_no_mapping:
-        # add rows
-        df_weight_map = pd.concat(
-            [
-                df_weight_map,
-                pd.DataFrame(
-                    0, index=idx_data_no_mapping, columns=df_weight_map.columns
-                ),
-            ]
-        )
-
-    weights_to_rest_sum = ds_weights_to_rest.sum()
-    if weights_to_rest_sum:
-        # add additional row for NA in source
-        df_weight_map = pd.concat(
-            [df_weight_map, ds_weights_to_rest.to_frame().T.set_axis([NA_DIM_KEY])]
-        )
-        ds_weights_from_rest = pd.concat(
-            [ds_weights_from_rest, Series(0, index=[NA_DIM_KEY])]
-        )
-        ds_weights_from = pd.concat([ds_weights_from, ds_weights_to_rest])
+    # if ds_weights_to_rest.sum():
+    # add additional row for NA in source
+    df_weight_map = pd.concat(
+        [
+            df_weight_map,
+            ds_weights_to_rest.to_frame().T.set_axis(
+                [get_NA_DIM_KEY(df_weight_map.index)]
+            ),
+        ]
+    )
+    ds_weights_from_rest = pd.concat(
+        [
+            ds_weights_from_rest,
+            Series(0, index=[get_NA_DIM_KEY(ds_weights_from_rest.index)]),
+        ]
+    )
+    # ds_weights_from = pd.concat([ds_weights_from, ds_weights_to_rest])
 
     # if required: add NA output col
-    ds_weights_from_rest_sum = ds_weights_from_rest.sum()
-    if ds_weights_from_rest_sum:
-        df_weight_map = pd.concat(
-            [
-                df_weight_map,
-                ds_weights_from_rest.rename(
-                    NA_DIM_KEY  # type: ignore (yes, NA should be col identifier)
-                ),
-            ],
-            axis=1,
-        )
+    # if ds_weights_from_rest.sum():
+    df_weight_map = pd.concat(
+        [
+            df_weight_map,
+            ds_weights_from_rest.rename(
+                get_NA_DIM_KEY(df_weight_map.columns)  # type: ignore (yes, NA should be col identifier)
+            ),
+        ],
+        axis=1,
+    )
 
     return df_weight_map
 
@@ -227,6 +218,8 @@ def transform(
     if isinstance(ds_data.index, MultiIndex) and not isinstance(
         df_weight_map.index, MultiIndex
     ):
+        print(ds_data)
+        print(df_weight_map)
         df_weight_map.index = pd.MultiIndex.from_tuples(df_weight_map.index)
 
     ds_result = _transform(
@@ -296,8 +289,6 @@ def _transform(
     ds_result: Series = df_weight_map.apply(agg)
 
     if sum_data_numeric_ext_unmapped:
-        ds_result.loc[NA_DIM_KEY] = (
-            ds_result.loc[NA_DIM_KEY] + sum_data_numeric_ext_unmapped
-        )
+        ds_result.loc[_NA_DIM_KEY] += sum_data_numeric_ext_unmapped  # type:ignore
 
     return ds_result

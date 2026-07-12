@@ -21,7 +21,7 @@ SCALAR_INDEX_KEY = "__SCALAR__"
 
 
 def weighted_sum_ds(ds_data: Series, ds_weights: Series) -> float:
-    return (ds_data * ds_weights).sum()
+    return (ds_data * ds_weights).sum() / ds_weights.sum()
 
 
 def weighted_mode_ds(ds_data: Series, ds_weights: Series):
@@ -40,17 +40,17 @@ def weighted_mode_ds(ds_data: Series, ds_weights: Series):
 
     """
     return (
-        sum_weight_gruopby_values_ds(ds_data, ds_weights)
+        _sum_weight_gruopby_values_ds(ds_data, ds_weights)
         .sort_values(ascending=False)
         .index[0]
     )
 
 
-def sum_weight_gruopby_values_ds(ds_data: Series, ds_weights: Series) -> Series:
+def _sum_weight_gruopby_values_ds(ds_data: Series, ds_weights: Series) -> Series:
     return ds_weights.set_axis(ds_data.values).groupby(level=0).sum()
 
 
-def weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
+def _weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
     """get most median (but by weight)
 
     Parameters
@@ -67,10 +67,13 @@ def weighted_percentile_ds(ds_data: Series, ds_weights: Series, p: float = 0.5):
     Any
 
     """
+
+    # normalize weights
+    threshold = p * ds_weights.sum()
     # make values unique (sum weights)
-    ds_grouped = sum_weight_gruopby_values_ds(ds_data, ds_weights).sort_index()
+    ds_grouped = _sum_weight_gruopby_values_ds(ds_data, ds_weights).sort_index()
     # find first index where cum sum >= p
-    return ds_grouped.cumsum().ge(p).idxmax()
+    return ds_grouped.cumsum().ge(threshold).idxmax()
 
 
 def weighted_median_ds(ds_data: Series, ds_weights: Series):
@@ -88,7 +91,7 @@ def weighted_median_ds(ds_data: Series, ds_weights: Series):
     Any
 
     """
-    return weighted_percentile_ds(ds_data, ds_weights, p=0.5)
+    return _weighted_percentile_ds(ds_data, ds_weights, p=0.5)
 
 
 def is_na(x) -> bool:

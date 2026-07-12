@@ -53,7 +53,8 @@ from pandas import NA, DataFrame, Index, Series
 from .utils import SeriesDict, SeriesFrame, as_series
 from .vtypes import VariableType, VT_NumericExt
 
-NA_DIM_KEY = "__NA__"
+# FIXME: what if multiindex
+NA_DIM_KEY = NA
 
 
 def _assert_index_unique_no_na(index: Index, name: str):

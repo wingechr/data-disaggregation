@@ -135,6 +135,8 @@ def _create_full_weightmap(
                 ),
             ]
         )
+        # FIXME: should value be 1 or dependent on other columns?
+        # maybe they should only be used for NumericExt?
         ds_1 = Series(1, index=idx_data_no_mapping)
         ds_weights_from_rest = pd.concat([ds_weights_from_rest, ds_1])
         ds_weights_from = pd.concat([ds_weights_from, ds_1])
@@ -154,7 +156,13 @@ def _create_full_weightmap(
     ds_weights_from_rest_sum = ds_weights_from_rest.sum()
     if ds_weights_from_rest_sum:
         df_weight_map = pd.concat(
-            [df_weight_map, ds_weights_from_rest.rename(NA_DIM_KEY)], axis=1
+            [
+                df_weight_map,
+                ds_weights_from_rest.rename(
+                    NA_DIM_KEY  # type: ignore (yes, NA should be col identifier)
+                ),
+            ],
+            axis=1,
         )
 
     return df_weight_map
@@ -244,7 +252,6 @@ def _transform(
 ) -> Series:
     ds_data = ds_data.reindex(df_weight_map.index)
 
-    print(df_weight_map)
     #  scale extensive => intensive
     if vtype == VT_NumericExt:
         ds_weights_from = df_weight_map.sum(axis=1)

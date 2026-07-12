@@ -5,7 +5,7 @@ from typing import cast
 import numpy as np
 from pandas import DataFrame, Index, MultiIndex, Series
 
-from .base import transform
+from .base import Transformer
 from .utils import SCALAR_DIM_NAME, SCALAR_INDEX_KEY, SeriesFrame, is_scalar
 from .vtypes import VariableType
 
@@ -295,23 +295,22 @@ def transform_pandas(
     idx_in = ds_size_in.index
     idx_out = ds_size_out.index
 
+    df_weight_map = ds_weight_map.unstack(level=1)
+    transformer = Transformer(
+        vtype=vtype,
+        df_weight_map=df_weight_map,
+        ds_weights_from=ds_size_in,
+        ds_weights_to=ds_size_out,
+        weight_rel_threshold=0,
+    )
+
     # apply base function
     df_result = DataFrame(index=idx_out)
+
     for name in df_data.columns:
-        s_col = df_data[name]
-        s_col = s_col.dropna()
+        df_result[name] = transformer(df_data[name])
 
-        res_col = transform(
-            vtype=vtype,
-            data=s_col,
-            weight_map=ds_weight_map,
-            weights_from=ds_size_in,
-            weights_to=ds_size_out,
-            weight_rel_threshold=0.0,
-        )
-
-        s_res_col = Series(res_col, name=s_col.name)
-        df_result[s_col.name] = s_res_col
+    # df_result = df_data.apply(transformer)# FIXME: why is this different
 
     result = format_result(
         df_result,

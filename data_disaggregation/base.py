@@ -185,7 +185,7 @@ class Transformer:
             # ds_weights_to=self.ds_weights_to,
             weight_rel_threshold=self.weight_rel_threshold,
             na_dim_key=self.na_dim_key,
-        )
+        ).rename(ds_data.name)  # type:ignore
 
 
 def transform(
@@ -231,7 +231,7 @@ def transform(
     ds_data = ds_data.convert_dtypes().dropna()  # normalize and drop na
 
     ds_weight_map = as_series(weight_map)
-    df_weight_map = ds_weight_map.unstack(level=1).fillna(0)
+    df_weight_map = ds_weight_map.unstack(level=1)
     # fix problem with multiindex
     if isinstance(ds_data.index, MultiIndex) and not isinstance(
         df_weight_map.index, MultiIndex

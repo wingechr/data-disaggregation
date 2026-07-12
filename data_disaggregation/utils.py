@@ -99,7 +99,7 @@ def is_na(x) -> bool:
 
 
 def na_as_0(x: float) -> float:
-    return x if math.isfinite(x) else 0
+    return 0 if is_na(x) else x
 
 
 def is_scalar(x) -> bool:

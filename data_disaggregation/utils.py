@@ -3,7 +3,7 @@
 import math
 from typing import TypeVar
 
-from pandas import DataFrame, Series
+from pandas import NA, DataFrame, Series
 
 F = TypeVar("F")
 T = TypeVar("T")
@@ -95,7 +95,11 @@ def weighted_median_ds(ds_data: Series, ds_weights: Series):
 
 
 def is_na(x) -> bool:
-    return x is None or (isinstance(x, float) and not math.isfinite(x))
+    return x is None or x is NA or (isinstance(x, float) and not math.isfinite(x))
+
+
+def na_as_0(x: float) -> float:
+    return x if math.isfinite(x) else 0
 
 
 def is_scalar(x) -> bool:

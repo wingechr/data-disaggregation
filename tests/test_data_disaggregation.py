@@ -69,6 +69,7 @@ class TestUtils(TestCase):
             (float("inf"), True),
             (float("nan"), True),
             (np.nan, True),
+            (NA, True),
         ]:
             self.assertEqual(is_na(x), y)
 
@@ -244,7 +245,7 @@ class TestBaseExamples(TestCase):
         self.assertTrue(res["01"] is NA)
 
         # no loss
-        self.assertAlmostEqual(Series(res).sum(), 100)
+        self.assertAlmostEqual(Series(res).sum(), 100)  # type:ignore
 
     def test_scalar_key_none(self):
         """test_scalar_key_none

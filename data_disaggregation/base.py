@@ -50,13 +50,13 @@ from typing import Any
 import pandas as pd
 from pandas import NA, DataFrame, Index, MultiIndex, Series
 
-from .utils import SeriesDict, SeriesFrame, as_series
+from .utils import SeriesDict, SeriesFrame, as_series, is_na, na_as_0
 from .vtypes import VariableType, VT_NumericExt
 
-_NA_DIM_KEY = NA  # "__NA__"
+_NA_DIM_KEY = "__NA__"
 
 
-def get_NA_DIM_KEY(for_index: Index):
+def get_NA_DIM_KEY(for_index: Index) -> Any:
     sample = for_index[0]
     if isinstance(sample, tuple):
         return tuple([_NA_DIM_KEY] * len(sample))
@@ -218,8 +218,6 @@ def transform(
     if isinstance(ds_data.index, MultiIndex) and not isinstance(
         df_weight_map.index, MultiIndex
     ):
-        print(ds_data)
-        print(df_weight_map)
         df_weight_map.index = pd.MultiIndex.from_tuples(df_weight_map.index)
 
     ds_result = _transform(
@@ -288,7 +286,14 @@ def _transform(
 
     ds_result: Series = df_weight_map.apply(agg)
 
+    idx_na = get_NA_DIM_KEY(ds_result.index)
     if sum_data_numeric_ext_unmapped:
-        ds_result.loc[_NA_DIM_KEY] += sum_data_numeric_ext_unmapped  # type:ignore
+        ds_result[idx_na] = na_as_0(ds_result[idx_na]) + na_as_0(
+            sum_data_numeric_ext_unmapped
+        )
+
+    # remove if not used
+    if is_na(ds_result[idx_na]):
+        del ds_result[idx_na]
 
     return ds_result

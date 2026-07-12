@@ -30,7 +30,7 @@ jobs:
           pip install uv
           uv sync --group=test
       - run: |
-          uv run pytest --cov=datatools --cov-report=term-missing --cov-report=xml:coverage.xml
+          uv run pytest --cov=data_disaggregation --cov-report=term-missing --cov-report=xml:coverage.xml
       - uses: codecov/codecov-action@v4
         with:
           files: coverage.xml

@@ -31,6 +31,7 @@ dev = [
     "bump-my-version>=1.4.1",
     "pre-commit>=4.2",
     "ruff>=0.15.21",
+    "poethepoet>=0.38",
 ]
 test = [
     "tox-uv>=1.33",      # for uv-venv-runner
@@ -76,3 +77,10 @@ envlist = ["py310", "py314"]
 [tool.tox.env_run_base]
 runner = "uv-venv-lock-runner" # use tox-uv
 commands = [["pytest"]]
+
+[tool.poe.tasks]
+cov = "uv run pytest --cov=data_disaggregation --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml"
+test = "uv run tox"
+docs = "uv run mkdocs build"
+build = "uv build"
+bump = "bump-my-version bump"

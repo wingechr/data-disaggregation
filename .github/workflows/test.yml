@@ -3,7 +3,6 @@ name: test
 on:
   push:
     branches:
-      - main
       - dev
 
 jobs:
@@ -12,22 +11,28 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest] # macos-latest
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v2
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: |
+          pip install uv
+          uv sync --group=test
+      - run: |
+          uv run tox
+
+  codecov:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: |
+          pip install uv
+          uv sync --group=test
+      - run: |
+          uv run pytest --cov=data_disaggregation --cov-report=term-missing --cov-report=xml:coverage.xml
+      - uses: codecov/codecov-action@v4
         with:
-          auto-activate-base: true
-          activate-environment: ""
-      - run: |
-          conda config --system --set changeps1 False  # fixes conda: UnicodeEncodeError in windows
-          conda install -q -y -c conda-forge tox
-          conda create -q -y -n py38 python=3.8
-          conda create -q -y -n py313 python=3.13
-      - run: |
-          export PY38_PATH=$CONDA/envs/py38/bin
-          export PY313_PATH=$CONDA/envs/py313/bin
-          export PATH=$PATH:$PY38_PATH:$PY313_PATH
-          tox # --parallel
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true

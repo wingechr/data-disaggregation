@@ -1,27 +1,21 @@
-name: publish
+name: pypi
 
 on:
-  workflow_run:
-    workflows:
-      - test
+  push:
     branches:
       - main
-    types:
-      - completed
 
 jobs:
   publish:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-          cache: "pip" # caching pip dependencies
-      - run: pip install --upgrade -r requirements.txt
-      - run: python -m build --sdist --wheel --outdir dist/
-      - run: mkdocs gh-deploy --force
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: |
+          pip install uv
+      - run: |
+          uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true

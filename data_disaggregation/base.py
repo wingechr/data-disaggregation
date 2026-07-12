@@ -45,33 +45,164 @@ Helper to create the mapping
 
 """
 
-from typing import Mapping, Tuple
+from __future__ import annotations  # Series[...] for older python/pandas
 
-from .utils import (
-    as_set,
-    group_idx_first,
-    group_idx_second,
-    is_map,
-    is_mapping,
-    is_na,
-    is_subset,
-    is_unique,
-    iter_values,
-)
-from .vtypes import F, T, V, VariableType, VT_NumericExt
+from typing import Any
 
-VALIDATE_EQ_REL_TOLERANCE = 1e-10
+import pandas as pd
+from pandas import DataFrame, Index, MultiIndex, Series
+
+from .utils import SeriesDict, SeriesFrame, as_series
+from .vtypes import VariableType
+
+_NA_DIM_KEY = "__NA__"
+
+
+def get_NA_DIM_KEY(for_index: Index) -> Any:
+    sample = for_index[0]
+    if isinstance(sample, tuple):
+        return tuple([_NA_DIM_KEY] * len(sample))
+    return _NA_DIM_KEY
+
+
+def _assert_index_unique_no_na(index: Index, name: str):
+    if not index.is_unique:
+        raise Exception(f"index not unique in {name}: {set(index.duplicated())}")
+    for level in range(index.nlevels):
+        if any(index.get_level_values(level).isna()):
+            raise Exception(f"index contains NA in {name}")
+    if get_NA_DIM_KEY(index) in index:
+        raise Exception(f"index contains {get_NA_DIM_KEY(index)} in {name}")
+
+
+def _assert_all_gt0(data: SeriesFrame, name: str):
+    if not all(data > 0):
+        raise Exception(f"Not all values are > 0 in {name}")
+
+
+def _assert_all_ge0(data: SeriesFrame, name: str):
+    if not all(data >= 0):
+        raise Exception(f"Not all values are >= 0 in {name}")
+
+
+def _assert_index_subset(index: Index, ref_index: Index, name: str):
+    err = set(index) - set(ref_index)
+    if err:
+        raise Exception(f"Unexepcted, additional elements in {name}: {err}")
+
+
+def _check_initialize_weights(
+    df_weight_map: DataFrame,
+    ds_weights_from: Series[float],
+    ds_weights_to: Series[float],
+) -> tuple[DataFrame, Series, Series]:
+    # convert weights to frame, rows = from, cols = to, realign
+    df_weight_map = df_weight_map.reindex(
+        index=ds_weights_from.index, columns=ds_weights_to.index
+    ).fillna(0)
+
+    # all indices must be unique and not NA
+    _assert_index_unique_no_na(df_weight_map.index, "weights (source)")
+    _assert_index_unique_no_na(df_weight_map.columns, "weights (target)")
+    _assert_index_unique_no_na(ds_weights_from.index, "weights (sum source)")
+    _assert_index_unique_no_na(ds_weights_to.index, "weights (sum target)")
+    _assert_all_gt0(ds_weights_from, "weights (sum source)")
+    _assert_all_gt0(ds_weights_to, "weights (sum target)")
+    _assert_all_ge0(df_weight_map, "weights")
+    # weights have to be in ds_weights_from / ds_weights_to sums
+    _assert_index_subset(df_weight_map.index, ds_weights_from.index, "weights (source)")
+    _assert_index_subset(df_weight_map.columns, ds_weights_to.index, "weights (target)")
+
+    # differences of sum weights and weigh sums
+    ds_weights_from_rest = ds_weights_from - df_weight_map.sum(axis=1)
+    _assert_all_ge0(ds_weights_from_rest, "col weights for NA")
+    ds_weights_to_rest = ds_weights_to - df_weight_map.sum(axis=0)
+    _assert_all_ge0(ds_weights_to_rest, "row weights for NA")
+
+    # add additional row for NA in source
+    df_weight_map = pd.concat(
+        [
+            df_weight_map,
+            ds_weights_to_rest.to_frame().T.set_axis(
+                [get_NA_DIM_KEY(df_weight_map.index)]
+            ),
+        ]
+    )
+    ds_weights_from_rest = pd.concat(
+        [
+            ds_weights_from_rest,
+            Series(0, index=[get_NA_DIM_KEY(ds_weights_from_rest.index)]),
+        ]
+    )
+
+    # add NA output col (temp)
+    df_weight_map_w_na_column = pd.concat(
+        [
+            df_weight_map,
+            ds_weights_from_rest.rename(
+                get_NA_DIM_KEY(df_weight_map.columns)  # type: ignore (yes, NA should be col identifier)
+            ),
+        ],
+        axis=1,
+    )
+
+    # df_weight_map.columns = ds_weights_to.index
+    df_weight_map.columns.names = ds_weights_to.index.names
+
+    ds_weights_from = df_weight_map_w_na_column.sum(axis=1)
+    ds_weights_to = df_weight_map.sum(axis=0)
+
+    return df_weight_map, ds_weights_from, ds_weights_to
+
+
+class Transformer:
+    def __init__(
+        self,
+        vtype: type[VariableType],
+        df_weight_map: DataFrame,
+        ds_weights_from: Series | None = None,
+        ds_weights_to: Series | None = None,
+        weight_rel_threshold: float = 0.0,
+    ):
+        ds_weights_from = (
+            df_weight_map.sum(axis=1) if ds_weights_from is None else ds_weights_from
+        )
+        ds_weights_to = (
+            df_weight_map.sum(axis=0) if ds_weights_to is None else ds_weights_to
+        )
+        df_weight_map, ds_weights_from, ds_weights_to = _check_initialize_weights(
+            df_weight_map, ds_weights_from, ds_weights_to
+        )
+
+        self.df_weight_map: DataFrame = df_weight_map
+        self.ds_weights_from: Series = ds_weights_from
+        self.ds_weights_to: Series = ds_weights_to
+        self.vtype: type[VariableType] = vtype
+        self.weight_rel_threshold: float = weight_rel_threshold
+
+    def __call__(self, ds_data: Series) -> Series:
+        _assert_index_unique_no_na(ds_data.index, str(ds_data.name))
+        return (
+            self.vtype.transform(
+                ds_data=ds_data,
+                df_weight_map=self.df_weight_map,
+                ds_weights_from=self.ds_weights_from,
+                # ds_weights_to=self.ds_weights_to,
+                weight_rel_threshold=self.weight_rel_threshold,
+            )
+            .rename(ds_data.name)  # type:ignore
+            .rename_axis(index=self.df_weight_map.columns.names)
+        )  # type:ignore
 
 
 def transform(
-    vtype: VariableType,
-    data: Mapping[F, V],
-    weight_map: Mapping[Tuple[F, T], float],
-    weights_from: Mapping[F, float] = None,
-    weights_to: Mapping[T, float] = None,
+    vtype: type[VariableType],
+    data: SeriesDict,
+    weight_map: SeriesDict,
+    weights_from: SeriesDict | None = None,
+    weights_to: SeriesDict | None = None,
     weight_rel_threshold: float = 0.0,
-    validate: bool = True,
-) -> Mapping[T, V]:
+) -> SeriesDict:
     """(dis-)aggregate data.
 
     Parameters
@@ -94,8 +225,6 @@ def transform(
         if the sum of input weights / output weight is smaller than this threshold.
         For example, you may want to set it to 0.5 for geographical mappings with
         extensive data.
-    validate bool:
-        if True: run additional (but costly) validations of weights and data.
 
     Returns
     -------
@@ -103,83 +232,32 @@ def transform(
         output data as a mapping from output keys (any hashable) to values.
 
     """
-    if weights_from is None:
-        weights_from = group_idx_first(weight_map)
 
-    if weights_to is None:
-        weights_to = group_idx_second(weight_map)
+    ds_data = as_series(data)
+    # harmonize NaN/None/NA and drop from data
+    ds_data = ds_data.convert_dtypes().dropna()  # normalize and drop na
 
-    if validate:
-        # validate size_f
-        assert is_mapping(weights_from)
-        assert is_unique(weights_from)
-        assert all(v > 0 for v in iter_values(weights_from))
+    ds_weight_map = as_series(weight_map)
+    df_weight_map = ds_weight_map.unstack(level=1)
+    # fix problem with multiindex
+    if isinstance(ds_data.index, MultiIndex) and not isinstance(
+        df_weight_map.index, MultiIndex
+    ):
+        df_weight_map.index = pd.MultiIndex.from_tuples(df_weight_map.index)
 
-        # validate size_t
-        assert is_mapping(weights_to)
-        assert is_unique(weights_to)
-        assert all(v > 0 for v in iter_values(weights_to))
+    ds_weights_from = None if weights_from is None else as_series(weights_from)
+    ds_weights_to = None if weights_to is None else as_series(weights_to)
 
-        # validate var
-        assert is_mapping(data)
-        assert is_unique(data)
-
-        if not is_subset(data, weights_from):
-            err = as_set(data) - as_set(weights_from)
-            raise Exception(
-                f"Variable index is not a subset of input dimension subset: {err}"
-            )
-
-        # validate map
-        assert is_map(weight_map)
-        assert is_unique(weight_map)
-        assert all(v >= 0 for v in iter_values(weight_map))
-        assert is_subset([x[0] for x in weight_map.keys()], weights_from)
-        assert is_subset([x[1] for x in weight_map.keys()], weights_to)
-        # assert all(isinstance(v, (float, int)) for v in iter_values(weight_map))
-
-    # filter nan in data
-    data = dict((f, v) for f, v in data.items() if not is_na(v))
-
-    #  scale extensive => intensive
-    if vtype == VT_NumericExt:
-        data = dict((f, v / weights_from[f]) for f, v in data.items())
-
-    # filter unused in weight_map: input:
-    weight_map = dict(((f, t), w) for (f, t), w in weight_map.items() if f in data)
-
-    # filter unused in weight_map: output
-    weight_map = dict(
-        ((f, t), w) for (f, t), w in weight_map.items() if weights_to.get(t, 0) > 0
+    transformer = Transformer(
+        vtype=vtype,
+        df_weight_map=df_weight_map,
+        ds_weights_from=ds_weights_from,
+        ds_weights_to=ds_weights_to,
+        weight_rel_threshold=weight_rel_threshold,
     )
 
-    # init groups
-    groups = dict((t, []) for t in set(_t for (_, _t) in weight_map.keys()))
-    # group data by output keys
-    for (f, t), w in weight_map.items():
-        v = data[f]
-        groups[t].append((v, w))
+    ds_result = transformer(ds_data)
 
-    # create weight sums
-    group_sumw = dict((t, sum(w for _, w in vws)) for t, vws in groups.items())
-
-    # drop groups under threshold
-    if weight_rel_threshold:
-        sumw_rel = dict((t, sumw / weights_to[t]) for t, sumw in group_sumw.items())
-        groups = dict(
-            (t, vws) for t, vws in groups.items() if sumw_rel[t] >= weight_rel_threshold
-        )
-
-    result = {}
-    for t, vws in groups.items():
-        # normalize weights
-        vws = [(v, w / group_sumw[t]) for v, w in vws]
-        # aggregate
-        result[t] = vtype.weighted_aggregate(vws)
-
-    #  re-scale intensive => extensive
-    if vtype == VT_NumericExt:
-        for t, v in result.items():
-            result[t] = v * weights_to[t]
+    result = type(data)(ds_result)
 
     return result

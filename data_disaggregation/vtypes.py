@@ -1,36 +1,77 @@
-"""Type classes for data.
-"""
+"""Type classes for data."""
+
+from __future__ import annotations  # Series[...] for older python/pandas
 
 from abc import ABC
-from typing import TypeVar
+import logging
+from math import isclose
+from typing import Any
 
-from . import utils
+from pandas import NA, DataFrame, Series
 
-F = TypeVar("F")
-T = TypeVar("T")
-V = TypeVar("V")
-
-SCALAR_DIM_NAME = "__SCALAR__"
-# TODO: using None in pandas causes problems with autoconvert to nan
-SCALAR_INDEX_KEY = "__SCALAR__"
+from .utils import (
+    weighted_median_ds,
+    weighted_mode_ds,
+    weighted_sum_ds,
+)
 
 
 class VariableType(ABC):
     @classmethod
-    def weighted_aggregate(cls, data):
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
         """aggregate data
 
         Parameters
         ----------
-        data : Iterable
+        ds_data: Series
             non empty list of (value, weight) pairs.
             weights must be numerical, positive, and sum up to 1.0.
+        ds_weights: Series
+            TODO
 
         Returns
         -------
         aggregated value
+
         """
         raise NotImplementedError()
+
+    @classmethod
+    def transform(
+        cls,
+        ds_data: Series[Any],  # incl. NA
+        df_weight_map: DataFrame,  # >= 0
+        ds_weights_from: Series,
+        weight_rel_threshold: float = 0.0,
+    ) -> Series:
+        ds_data = ds_data.reindex(df_weight_map.index)
+
+        def agg(ds_weights: Series):
+            values_not_na, weights_val_not_na, share_weights_na = (
+                cls._get_value_weights(ds_weights, ds_data)
+            )
+            if len(weights_val_not_na) == 0 or share_weights_na > weight_rel_threshold:
+                return NA
+
+            result = cls.weighted_aggregate_ds(values_not_na, weights_val_not_na)
+            return result
+
+        ds_result: Series = df_weight_map.apply(agg)
+
+        return ds_result
+
+    @classmethod
+    def _get_value_weights(cls, ds_weights: Series, ds_data: Series):
+        weights_gt0 = ds_weights.loc[ds_weights > 0]
+        ds_values_incl_na = ds_data.loc[weights_gt0.index]
+        idx_val_na = ds_values_incl_na.isna()
+        weights_val_na = weights_gt0.loc[idx_val_na]
+        weights_val_not_na = weights_gt0.loc[~idx_val_na]
+        values_not_na = ds_values_incl_na.loc[~idx_val_na]
+        weights_sum = weights_gt0.sum()
+        weights_val_na_sum = weights_val_na.sum()
+        share_weights_na = weights_val_na_sum / weights_sum
+        return values_not_na, weights_val_not_na, share_weights_na
 
 
 class VT_Nominal(VariableType):
@@ -42,21 +83,14 @@ class VT_Nominal(VariableType):
     """
 
     @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_mode(data)
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        return weighted_mode_ds(ds_data, ds_weights)
 
 
 class VT_Ordinal(VT_Nominal):
-    """Type class for ordinal data (ranked categorical).
-
-    - Aggregation method: median
-    - Disaggregation method: keep value
-    - Examples: Level of agreement
-    """
-
     @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_median(data)
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        return weighted_median_ds(ds_data, ds_weights)
 
 
 class VT_Numeric(VariableType):
@@ -70,8 +104,22 @@ class VT_Numeric(VariableType):
     """
 
     @classmethod
-    def weighted_aggregate(cls, data):
-        return utils.weighted_sum(data)
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        """get sum product.
+
+        Parameters
+        ----------
+        value_normweights : list
+            non empty list of (value, weight) pairs.
+            * values must be numerical.
+            * weights must be numerical, positive, and sum up to 1.0.
+
+        Returns
+        -------
+        : float
+
+        """
+        return weighted_sum_ds(ds_data, ds_weights)
 
 
 class VT_NumericExt(VT_Numeric):
@@ -85,4 +133,56 @@ class VT_NumericExt(VT_Numeric):
     - Examples: population, energy, total cost
     """
 
-    pass
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        """get sum product.
+
+        Parameters
+        ----------
+        value_normweights : list
+            non empty list of (value, weight) pairs.
+            * values must be numerical.
+            * weights must be numerical, positive, and sum up to 1.0.
+
+        Returns
+        -------
+        : float
+
+        """
+        return ds_data.sum()
+
+    @classmethod
+    def transform(
+        cls,
+        ds_data: Series[Any],  # incl. NA
+        df_weight_map: DataFrame,  # >= 0
+        ds_weights_from: Series,
+        weight_rel_threshold: float = 0.0,
+    ) -> Series:
+        # FIXME
+        # only for extensive: preserve values that are unmapped
+        # and add them to NA output key
+        sum_data = ds_data.sum()
+
+        ds_data = ds_data.reindex(df_weight_map.index)
+
+        def agg(ds_weights: Series):
+            values_not_na, weights_val_not_na, share_weights_na = (
+                cls._get_value_weights(ds_weights, ds_data)
+            )
+
+            values_not_na = values_not_na * weights_val_not_na / ds_weights_from
+
+            if len(weights_val_not_na) == 0 or share_weights_na > weight_rel_threshold:
+                return NA
+
+            result = cls.weighted_aggregate_ds(values_not_na, weights_val_not_na)
+            return result
+
+        ds_result: Series = df_weight_map.apply(agg)
+
+        val_lost = sum_data - ds_result.sum()
+        if not isclose(val_lost, 0):
+            logging.warning("Lossy mapping - lost %s in %s", val_lost, ds_data.name)
+
+        return ds_result

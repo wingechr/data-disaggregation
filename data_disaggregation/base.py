@@ -48,13 +48,13 @@ Helper to create the mapping
 from typing import Any
 
 import pandas as pd
-from pandas import NA, DataFrame, Index, Series
+from pandas import NA, DataFrame, Index, MultiIndex, Series
 
 from .utils import SeriesDict, SeriesFrame, as_series
 from .vtypes import VariableType, VT_NumericExt
 
 # FIXME: what if multiindex
-NA_DIM_KEY = NA
+NA_DIM_KEY = "__NA__"
 
 
 def _assert_index_unique_no_na(index: Index, name: str):
@@ -135,11 +135,6 @@ def _create_full_weightmap(
                 ),
             ]
         )
-        # FIXME: should value be 1 or dependent on other columns?
-        # maybe they should only be used for NumericExt?
-        ds_1 = Series(1, index=idx_data_no_mapping)
-        ds_weights_from_rest = pd.concat([ds_weights_from_rest, ds_1])
-        ds_weights_from = pd.concat([ds_weights_from, ds_1])
 
     weights_to_rest_sum = ds_weights_to_rest.sum()
     if weights_to_rest_sum:
@@ -228,6 +223,12 @@ def transform(
         ds_data, ds_weight_map, ds_weights_from, ds_weights_to
     )
 
+    # fix problem with multiindex
+    if isinstance(ds_data.index, MultiIndex) and not isinstance(
+        df_weight_map.index, MultiIndex
+    ):
+        df_weight_map.index = pd.MultiIndex.from_tuples(df_weight_map.index)
+
     ds_result = _transform(
         vtype,
         ds_data,
@@ -250,43 +251,53 @@ def _transform(
     df_weight_map: DataFrame,  # >= 0
     weight_rel_threshold: float = 0.0,
 ) -> Series:
+    ds_weights_from_sum = df_weight_map.sum(axis=1)
+
+    # FIXME
+    global sum_data_numeric_ext_unmapped
+    if vtype == VT_NumericExt:
+        # only for extensive: preserve values that are unmapped
+        # and add them to NA output key
+        sum_data_numeric_ext_unmapped = ds_data.loc[
+            ~ds_data.index.isin(df_weight_map.index)
+        ].sum()
+
+    else:
+        sum_data_numeric_ext_unmapped = None
+
     ds_data = ds_data.reindex(df_weight_map.index)
 
-    #  scale extensive => intensive
-    if vtype == VT_NumericExt:
-        ds_weights_from = df_weight_map.sum(axis=1)
-        ds_data = ds_data / ds_weights_from
-
     def agg(weights: Series):
-        weights = weights.loc[weights > 0]
-        weights_sum = weights.sum()
-        if not weights_sum:
-            # no values
-            return NA
-        ds_weights_rel = weights / weights_sum
-        ds_values_incl_na = ds_data.loc[weights.index]
-
+        weights_gt0 = weights.loc[weights > 0]
+        ds_values_incl_na = ds_data.loc[weights_gt0.index]
         idx_val_na = ds_values_incl_na.isna()
+        weights_val_na = weights_gt0.loc[idx_val_na]
+        weights_val_not_na = weights_gt0.loc[~idx_val_na]
+        values_not_na = ds_values_incl_na.loc[~idx_val_na]
+        weights_sum = weights_gt0.sum()
+        weights_val_na_sum = weights_val_na.sum()
 
-        sum_weights_rel_na = ds_weights_rel.loc[idx_val_na].sum()
+        global sum_data_numeric_ext_unmapped
 
-        if sum_weights_rel_na > weight_rel_threshold or idx_val_na.all():
+        if vtype == VT_NumericExt:
+            values_not_na = values_not_na * weights_val_not_na / ds_weights_from_sum
+
+        if (
+            len(weights_val_not_na) == 0
+            or (weights_val_na_sum / weights_sum) > weight_rel_threshold
+        ):
+            if vtype == VT_NumericExt:
+                sum_data_numeric_ext_unmapped += values_not_na.sum()
             return NA
 
-        ds_values = ds_values_incl_na.loc[~idx_val_na]
+        result = vtype.weighted_aggregate_ds(values_not_na, weights_val_not_na)
+        return result
 
-        # FIXME: should we really rescale relative to non na?
-        # ds_weights_rel = ds_weights_rel.loc[~idx_val_na]
-        weights_not_na = weights.loc[~idx_val_na]
-        ds_weights_rel = weights_not_na / weights_not_na.sum()
+    ds_result: Series = df_weight_map.apply(agg)
 
-        return vtype.weighted_aggregate_ds(ds_values, ds_weights_rel)
+    if sum_data_numeric_ext_unmapped:
+        ds_result.loc[NA_DIM_KEY] = (
+            ds_result.loc[NA_DIM_KEY] + sum_data_numeric_ext_unmapped
+        )
 
-    df_result = df_weight_map.apply(agg)
-
-    #  re-scale intensive => extensive
-    if vtype == VT_NumericExt:
-        ds_weights_to = df_weight_map.sum(axis=0)
-        df_result = df_result * ds_weights_to
-
-    return df_result
+    return ds_result

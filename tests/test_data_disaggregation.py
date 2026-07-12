@@ -238,10 +238,13 @@ class TestBaseExamples(TestCase):
             weight_rel_threshold=0.5,
         )
         # FIXME: is this what we want?
-        self.assertAlmostEqual(res["00"], 100 / 5)
-        self.assertAlmostEqual(res["10"], 100 / 5 * 2)
+        self.assertAlmostEqual(res["00"], 100 / 5 * 0.51)
+        self.assertAlmostEqual(res["10"], 100 / 5 * 1.1)
         self.assertTrue(res["11"] is NA)
         self.assertTrue(res["01"] is NA)
+
+        # no loss
+        self.assertAlmostEqual(Series(res).sum(), 100)
 
     def test_scalar_key_none(self):
         """test_scalar_key_none

@@ -91,4 +91,20 @@ class VT_NumericExt(VT_Numeric):
     - Examples: population, energy, total cost
     """
 
-    pass
+    @classmethod
+    def weighted_aggregate_ds(cls, ds_data: Series, ds_weights: Series):
+        """get sum product.
+
+        Parameters
+        ----------
+        value_normweights : list
+            non empty list of (value, weight) pairs.
+            * values must be numerical.
+            * weights must be numerical, positive, and sum up to 1.0.
+
+        Returns
+        -------
+        : float
+
+        """
+        return ds_data.sum()

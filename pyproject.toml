@@ -41,7 +41,7 @@ test = [
 ]
 docs = [
     "mdx-truly-sane-lists>=1.3",
-    "mistune>=2.0",
+    "mistune>=3.3.4",
     "mkdocs>=1.6,<2.0",          # 2.0 is incompatible with material
     "mkdocs-jupyter>=0.26.3",
     "mkdocs-material>=9.7",
